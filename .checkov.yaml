@@ -1,0 +1,15 @@
+directory:
+  - modules
+framework:
+  - terraform
+quiet: true
+compact: true
+
+# Repo-wide skips. Keep this list short and justify every entry — prefer fixing
+# the finding over skipping it.
+skip-check:
+  # Multi-AZ is driven by instance_count / reader instances, set per environment.
+  - CKV_AWS_157
+  # The module intentionally exposes its security group for the caller to wire;
+  # attachment is the consuming root's responsibility.
+  - CKV2_AWS_5

@@ -1,0 +1,12 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfplan
+
+# Local-only var files (commit *.tfvars.example instead)
+*.auto.tfvars
+override.tf
+override.tf.json

@@ -1,0 +1,52 @@
+stages:
+  - validate
+
+variables:
+  TF_VERSION: "1.9.8"
+
+# ---------------------------------------------------------------------------
+# terraform fmt — formatting is consistent across the whole repo
+# ---------------------------------------------------------------------------
+fmt:
+  stage: validate
+  image: hashicorp/terraform:$TF_VERSION
+  script:
+    - terraform fmt -check -recursive
+
+# ---------------------------------------------------------------------------
+# terraform validate — each module validates on its own (default provider).
+# ---------------------------------------------------------------------------
+validate:
+  stage: validate
+  image: hashicorp/terraform:$TF_VERSION
+  script:
+    - |
+      set -e
+      for mod in $(find modules -mindepth 2 -maxdepth 2 -type d); do
+        [ -f "$mod/providers.tf" ] || continue
+        echo "== validate $mod =="
+        ( cd "$mod" && terraform init -backend=false -input=false && terraform validate )
+      done
+
+# ---------------------------------------------------------------------------
+# tflint
+# ---------------------------------------------------------------------------
+tflint:
+  stage: validate
+  image:
+    name: ghcr.io/terraform-linters/tflint:latest
+    entrypoint: [""]
+  script:
+    - tflint --init
+    - tflint --recursive --config "$CI_PROJECT_DIR/.tflint.hcl"
+
+# ---------------------------------------------------------------------------
+# checkov — static security scan of the modules
+# ---------------------------------------------------------------------------
+checkov:
+  stage: validate
+  image:
+    name: bridgecrew/checkov:latest
+    entrypoint: [""]
+  script:
+    - checkov --directory modules --config-file .checkov.yaml
