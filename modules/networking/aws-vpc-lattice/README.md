@@ -10,7 +10,7 @@ creates CNAME records for each service's custom domain.
 
 ```hcl
 module "lattice" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/networking/aws-vpc-lattice?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-vpc-lattice?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

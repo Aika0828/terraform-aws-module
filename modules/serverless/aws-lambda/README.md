@@ -11,7 +11,7 @@ pre-built `.zip`, or an object already in S3.
 
 ```hcl
 module "lambda" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/serverless/aws-lambda?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/serverless/aws-lambda?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

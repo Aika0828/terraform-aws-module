@@ -10,7 +10,7 @@ execution role via `role_arn`.
 
 ```hcl
 module "scheduled_lambda" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/serverless/aws-scheduled-lambda?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/serverless/aws-scheduled-lambda?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

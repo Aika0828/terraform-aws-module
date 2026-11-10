@@ -25,6 +25,7 @@ data "archive_file" "this" {
 # Function + log group
 ###############################################################################
 resource "aws_cloudwatch_log_group" "this" {
+  #checkov:skip=CKV_AWS_338:Log retention is environment-driven (retention_in_days); not pinned in a reusable module
   name              = "/aws/lambda/${local.function_name}"
   retention_in_days = var.log_retention_days
   kms_key_id        = var.log_kms_key_id
@@ -33,6 +34,11 @@ resource "aws_cloudwatch_log_group" "this" {
 }
 
 resource "aws_lambda_function" "this" {
+  #checkov:skip=CKV_AWS_115:Lambda reserved concurrency is per-workload tuning left to the consumer
+  #checkov:skip=CKV_AWS_116:Lambda DLQ target is consumer-supplied via dead_letter_config
+  #checkov:skip=CKV_AWS_173:Lambda env-var CMK is consumer-supplied via kms_key_arn
+  #checkov:skip=CKV_AWS_272:Lambda code-signing config is consumer-supplied
+  #checkov:skip=CKV_AWS_50:X-Ray tracing is consumer-configurable via tracing_config
   function_name = local.function_name
   role          = var.role_arn
   handler       = var.handler

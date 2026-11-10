@@ -8,7 +8,7 @@ following the ECV module standard. Both parts are optional: supply a
 
 ```hcl
 module "monitoring" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/observability/aws-cloudwatch?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/observability/aws-cloudwatch?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

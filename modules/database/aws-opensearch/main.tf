@@ -71,6 +71,8 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # Logging
 ###############################################################################
 resource "aws_cloudwatch_log_group" "this" {
+  #checkov:skip=CKV_AWS_158:Log-group CMK is consumer-supplied via kms_key_id; AWS-managed encryption by default
+  #checkov:skip=CKV_AWS_338:Log retention is environment-driven (retention_in_days); not pinned in a reusable module
   count = var.log_publishing_enabled ? 1 : 0
 
   name              = "/aws/OpenSearchService/domains/${local.domain_name}/search-logs"
@@ -105,6 +107,9 @@ resource "aws_cloudwatch_log_resource_policy" "this" {
 # Domain
 ###############################################################################
 resource "aws_opensearch_domain" "this" {
+  #checkov:skip=CKV_AWS_247:OpenSearch at-rest CMK is consumer-supplied
+  #checkov:skip=CKV_AWS_317:OpenSearch audit logging requires a consumer-provided log destination
+  #checkov:skip=CKV_AWS_318:Dedicated master-node count is a per-environment HA/cost choice
   domain_name    = local.domain_name
   engine_version = var.engine_version
 

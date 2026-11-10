@@ -7,7 +7,7 @@ many modules, each consumed by a pinned git tag.
 
 ```hcl
 module "aurora" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/database/aws-rds-aurora?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-aurora?ref=v0.1.0"
 
   providers = { aws = aws.workload }
   # ...inputs...
@@ -27,7 +27,7 @@ whole repo:
 
 ```bash
 # copy the script into your project (or curl it), then:
-TFMOD_REPO=git@gitlab.com:<group>/terraform-aws-modules.git \
+TFMOD_REPO=git@gitlab.ecvmsp.com:ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git \
   ./fetch-modules.sh -t v0.1.0 aws-vpc aws-ecs-cluster database/aws-rds-aurora
 
 # → vendored into ./vendor/terraform-aws-modules/<domain>/<name>, referenced as:

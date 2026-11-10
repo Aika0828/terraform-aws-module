@@ -1,7 +1,6 @@
 locals {
-  name                = "${var.project_name}-${var.environment}"
-  bucket_name         = coalesce(var.bucket_name, "${local.name}-tfstate")
-  dynamodb_table_name = coalesce(var.dynamodb_table_name, "${local.name}-tfstate-lock")
+  name        = "${var.project_name}-${var.environment}"
+  bucket_name = coalesce(var.bucket_name, "${local.name}-tfstate")
 }
 
 ###############################################################################
@@ -61,20 +60,4 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   }
 
   depends_on = [aws_s3_bucket_versioning.this]
-}
-
-###############################################################################
-# DynamoDB lock table
-###############################################################################
-resource "aws_dynamodb_table" "this" {
-  name         = local.dynamodb_table_name
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-
-  tags = merge(var.tags, { Name = local.dynamodb_table_name })
 }

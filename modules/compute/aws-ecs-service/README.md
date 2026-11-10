@@ -10,7 +10,7 @@ load-balancer target group are passed in — this module does **not** create the
 
 ```hcl
 module "ecs_service" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/compute/aws-ecs-service?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/compute/aws-ecs-service?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

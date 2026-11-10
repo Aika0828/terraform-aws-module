@@ -49,15 +49,6 @@ variable "noncurrent_version_expiration_days" {
 }
 
 ###############################################################################
-# DynamoDB lock table
-###############################################################################
-variable "dynamodb_table_name" {
-  description = "Name of the DynamoDB state-lock table. Null derives '<project>-<env>-tfstate-lock'."
-  type        = string
-  default     = null
-}
-
-###############################################################################
 # Tags
 ###############################################################################
 variable "tags" {

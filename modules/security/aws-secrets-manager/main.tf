@@ -18,6 +18,7 @@ data "aws_secretsmanager_random_password" "this" {
 }
 
 resource "aws_secretsmanager_secret" "this" {
+  #checkov:skip=CKV_AWS_149:Secrets Manager CMK is consumer-supplied via kms_key_id
   for_each = var.secrets
 
   name                    = "${local.name}-${each.value.name}"

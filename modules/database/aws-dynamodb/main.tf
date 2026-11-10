@@ -4,6 +4,7 @@ locals {
 }
 
 resource "aws_dynamodb_table" "this" {
+  #checkov:skip=CKV_AWS_119:CMK is consumer-supplied via kms_key_id; AWS-managed key used by default
   name         = local.table_name
   billing_mode = var.billing_mode
   hash_key     = var.hash_key

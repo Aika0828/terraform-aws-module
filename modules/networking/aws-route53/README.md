@@ -11,7 +11,7 @@ both simple records (A/CNAME/TXT…) and alias records (ALB, VPC Lattice, etc.).
 
 ```hcl
 module "dns" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/networking/aws-route53?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-route53?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 
@@ -49,7 +49,7 @@ module "dns" {
 
 ```hcl
 module "dns_records" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/networking/aws-route53?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-route53?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

@@ -7,7 +7,7 @@ following the ECV module standard.
 
 ```hcl
 module "rabbitmq" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/messaging/aws-amazonmq?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/messaging/aws-amazonmq?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

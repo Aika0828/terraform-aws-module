@@ -6,6 +6,7 @@ locals {
 # ECR repository for the app image
 ###############################################################################
 resource "aws_ecr_repository" "app" {
+  #checkov:skip=CKV_AWS_136:ECR encryption CMK is consumer-supplied; AES256 by default
   name                 = "${local.name}-app"
   image_tag_mutability = var.ecr_image_tag_mutability
   force_delete         = var.ecr_force_delete

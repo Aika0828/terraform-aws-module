@@ -11,7 +11,7 @@ many AZs and how many subnets per tier you span.
 
 ```hcl
 module "spoke" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/networking/aws-hub-spoke?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-hub-spoke?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

@@ -148,6 +148,7 @@ resource "aws_vpclattice_auth_policy" "this" {
 # Access logs
 ###############################################################################
 resource "aws_cloudwatch_log_group" "access_logs" {
+  #checkov:skip=CKV_AWS_158:Log-group CMK is consumer-supplied via kms_key_id; AWS-managed encryption by default
   for_each = var.enable_access_logs ? var.services : {}
 
   name              = "/aws/vpc-lattice/${local.name}-${each.key}"

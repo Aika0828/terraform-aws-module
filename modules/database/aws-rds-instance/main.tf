@@ -63,13 +63,18 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # Instance
 ###############################################################################
 resource "aws_db_instance" "this" {
+  #checkov:skip=CKV_AWS_118:Enhanced monitoring needs a consumer-supplied monitoring role ARN (modules create no IAM)
+  #checkov:skip=CKV_AWS_129:RDS log exports to CloudWatch are consumer-configurable
+  #checkov:skip=CKV_AWS_161:RDS IAM auth is a consumer-enabled option
+  #checkov:skip=CKV_AWS_354:Performance Insights CMK is consumer-supplied
   identifier = local.name
 
-  engine         = var.engine
-  engine_version = var.engine_version
-  instance_class = var.instance_class
-  port           = var.port
-  db_name        = var.database_name
+  engine                     = var.engine
+  engine_version             = var.engine_version
+  instance_class             = var.instance_class
+  auto_minor_version_upgrade = var.auto_minor_version_upgrade
+  port                       = var.port
+  db_name                    = var.database_name
 
   username                    = var.master_username
   manage_master_user_password = var.manage_master_user_password ? true : null

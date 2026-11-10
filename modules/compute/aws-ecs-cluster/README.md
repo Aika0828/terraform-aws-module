@@ -6,7 +6,7 @@ An ECS cluster with Container Insights and Fargate capacity providers.
 
 ```hcl
 module "ecs_cluster" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/compute/aws-ecs-cluster?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/compute/aws-ecs-cluster?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

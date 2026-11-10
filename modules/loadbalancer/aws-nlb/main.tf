@@ -73,6 +73,8 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # Load balancer
 ###############################################################################
 resource "aws_lb" "this" {
+  #checkov:skip=CKV_AWS_150:Deletion protection is a per-environment choice via enable_deletion_protection
+  #checkov:skip=CKV_AWS_91:LB access logging requires a consumer-provided log bucket
   name                             = local.nlb_name
   internal                         = var.internal
   load_balancer_type               = "network"

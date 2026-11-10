@@ -45,6 +45,7 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 }
 
 resource "aws_elasticache_replication_group" "this" {
+  #checkov:skip=CKV_AWS_191:ElastiCache CMK is consumer-supplied via kms_key_id
   replication_group_id = "${local.name}-redis"
   description          = "Redis for ${var.project_name} in ${var.environment}"
 

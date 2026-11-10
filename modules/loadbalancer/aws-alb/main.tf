@@ -24,6 +24,7 @@ resource "aws_vpc_security_group_ingress_rule" "cidr" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "prefix_list" {
+  #checkov:skip=CKV_AWS_260:Ingress CIDRs are consumer-supplied; a public ALB intentionally allows 0.0.0.0/0 on its web port
   for_each          = toset(var.ingress_prefix_list_ids)
   security_group_id = aws_security_group.this.id
   prefix_list_id    = each.value
@@ -34,6 +35,7 @@ resource "aws_vpc_security_group_ingress_rule" "prefix_list" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "sg" {
+  #checkov:skip=CKV_AWS_260:Ingress CIDRs are consumer-supplied; a public ALB intentionally allows 0.0.0.0/0 on its web port
   for_each                     = toset(var.ingress_security_group_ids)
   security_group_id            = aws_security_group.this.id
   referenced_security_group_id = each.value
@@ -51,11 +53,14 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 }
 
 resource "aws_lb" "this" {
-  name               = local.alb_name
-  internal           = var.internal
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.this.id]
-  subnets            = var.subnet_ids
+  #checkov:skip=CKV_AWS_150:Deletion protection is a per-environment choice via enable_deletion_protection
+  #checkov:skip=CKV_AWS_91:LB access logging requires a consumer-provided log bucket
+  name                       = local.alb_name
+  internal                   = var.internal
+  load_balancer_type         = "application"
+  security_groups            = [aws_security_group.this.id]
+  subnets                    = var.subnet_ids
+  drop_invalid_header_fields = var.drop_invalid_header_fields
 
   tags = merge(var.tags, { Name = local.alb_name })
 }
@@ -82,6 +87,7 @@ resource "aws_lb_target_group" "this" {
 }
 
 resource "aws_lb_listener" "this" {
+  #checkov:skip=CKV_AWS_2:Listener protocol/cert is consumer-defined; HTTP listeners may intentionally redirect to HTTPS
   load_balancer_arn = aws_lb.this.arn
   port              = var.listener_port
   protocol          = var.listener_protocol

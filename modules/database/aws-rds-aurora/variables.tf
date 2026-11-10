@@ -188,3 +188,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "auto_minor_version_upgrade" {
+  description = "Automatically apply minor engine version upgrades during the maintenance window. Defaults to true."
+  type        = bool
+  default     = true
+}

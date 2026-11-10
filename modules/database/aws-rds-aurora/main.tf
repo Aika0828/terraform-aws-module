@@ -63,6 +63,9 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # Cluster
 ###############################################################################
 resource "aws_rds_cluster" "this" {
+  #checkov:skip=CKV_AWS_162:RDS cluster IAM auth is a consumer-enabled option
+  #checkov:skip=CKV_AWS_313:copy_tags_to_snapshot is consumer-configurable
+  #checkov:skip=CKV_AWS_324:RDS cluster log exports are consumer-configurable
   cluster_identifier = "${local.name}-aurora"
   engine             = var.engine
   engine_version     = var.engine_version
@@ -102,6 +105,8 @@ resource "aws_rds_cluster" "this" {
 }
 
 resource "aws_rds_cluster_instance" "this" {
+  #checkov:skip=CKV_AWS_118:Enhanced monitoring needs a consumer-supplied monitoring role ARN (modules create no IAM)
+  #checkov:skip=CKV_AWS_354:Performance Insights CMK is consumer-supplied
   count              = var.instance_count
   identifier         = "${local.name}-aurora-${count.index}"
   cluster_identifier = aws_rds_cluster.this.id
@@ -111,6 +116,7 @@ resource "aws_rds_cluster_instance" "this" {
 
   db_subnet_group_name         = aws_db_subnet_group.this.name
   performance_insights_enabled = var.performance_insights_enabled
+  auto_minor_version_upgrade   = var.auto_minor_version_upgrade
 
   tags = merge(var.tags, { Name = "${local.name}-aurora-${count.index}" })
 }

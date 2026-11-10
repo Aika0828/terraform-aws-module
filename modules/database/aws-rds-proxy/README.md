@@ -8,7 +8,7 @@ group, following the ECV module standard.
 
 ```hcl
 module "rds_proxy" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/database/aws-rds-proxy?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-proxy?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

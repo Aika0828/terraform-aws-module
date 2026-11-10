@@ -26,6 +26,7 @@ resource "aws_apigatewayv2_api" "this" {
 }
 
 resource "aws_apigatewayv2_stage" "this" {
+  #checkov:skip=CKV_AWS_76:API Gateway access logging requires a consumer-provided log destination
   api_id      = aws_apigatewayv2_api.this.id
   name        = local.stage_name
   auto_deploy = true
@@ -61,6 +62,7 @@ resource "aws_apigatewayv2_integration" "this" {
 }
 
 resource "aws_apigatewayv2_route" "this" {
+  #checkov:skip=CKV_AWS_309:Route authorization type is defined by the consumer per route
   for_each = local.routes
 
   api_id             = aws_apigatewayv2_api.this.id

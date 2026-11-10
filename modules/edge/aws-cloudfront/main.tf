@@ -24,6 +24,8 @@ resource "aws_cloudfront_vpc_origin" "this" {
 }
 
 resource "aws_cloudfront_distribution" "this" {
+  #checkov:skip=CKV_AWS_310:CloudFront origin failover is a consumer architecture choice
+  #checkov:skip=CKV_AWS_86:CloudFront access logging requires a consumer-provided log bucket
   enabled             = var.enabled
   is_ipv6_enabled     = var.is_ipv6_enabled
   comment             = local.comment

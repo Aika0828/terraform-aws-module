@@ -1,17 +1,19 @@
 # aws-tfstate-backend
 
-The classic Terraform remote-state backend: a versioned, encrypted S3 bucket
-with public access fully blocked and a lifecycle rule that expires old state
-versions, plus a DynamoDB lock table (`LockID` hash key, PAY_PER_REQUEST).
+A Terraform remote-state backend: a versioned, encrypted S3 bucket with public
+access fully blocked and a lifecycle rule that expires old state versions.
 
-This module creates **no IAM resources**. Grant access to the bucket and table
-through policies you own.
+State **locking** uses the S3 backend's native lock file (`use_lockfile = true`,
+Terraform ≥ 1.10) — **no DynamoDB table is required**.
+
+This module creates **no IAM resources**. Grant access to the bucket through
+policies you own.
 
 ## Usage
 
 ```hcl
 module "tfstate_backend" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/bootstrap/aws-tfstate-backend?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/bootstrap/aws-tfstate-backend?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 
@@ -25,17 +27,23 @@ Then point the backend at the created resources:
 ```hcl
 terraform {
   backend "s3" {
-    bucket         = "fin-app-dev-tfstate"
-    key            = "infra/terraform.tfstate"
-    region         = "ap-southeast-1"
-    dynamodb_table = "fin-app-dev-tfstate-lock"
-    encrypt        = true
+    bucket       = "fin-app-dev-tfstate"
+    key          = "infra/terraform.tfstate"
+    region       = "ap-southeast-1"
+    use_lockfile = true # native S3 state locking (Terraform >= 1.10)
+    encrypt      = true
   }
 }
 ```
 
 Bootstrap note: create this backend with local state first, then migrate state
 into the bucket it created.
+
+### Migrating from a DynamoDB lock table
+
+If you previously used `dynamodb_table`, you can set both `dynamodb_table` and
+`use_lockfile = true` during a transition (Terraform writes/checks both), then
+remove `dynamodb_table` and delete the old table once every root has migrated.
 
 ## Providers
 
@@ -57,7 +65,6 @@ come from the root's provider `default_tags`.
 | `project_name` | string | — | First part of every resource name. |
 | `environment` | string | — | dev / uat / prod. |
 | `bucket_name` | string | `null` | State bucket; null derives `<project>-<env>-tfstate`. |
-| `dynamodb_table_name` | string | `null` | Lock table; null derives `<project>-<env>-tfstate-lock`. |
 | `kms_key_arn` | string | `null` | KMS key for SSE; null uses AES256. |
 | `noncurrent_version_expiration_days` | number | `90` | Expire old state versions. |
 
@@ -68,7 +75,7 @@ See [`variables.tf`](./variables.tf) for the full list.
 | Name | Description |
 |------|-------------|
 | `bucket_name` | State bucket name. |
-| `dynamodb_table_name` | Lock table name. |
 | `bucket_arn` | State bucket ARN. |
+| `bucket_region` | State bucket region. |
 
 See [`outputs.tf`](./outputs.tf) for the full list.

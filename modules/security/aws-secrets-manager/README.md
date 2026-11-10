@@ -9,7 +9,7 @@ an external owner to populate.
 
 ```hcl
 module "secrets" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/security/aws-secrets-manager?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-secrets-manager?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

@@ -8,7 +8,7 @@ assume role that New Relic uses, which the caller owns.
 
 ```hcl
 module "newrelic" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/observability/aws-newrelic?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/observability/aws-newrelic?ref=v0.1.0"
 
   providers = {
     aws      = aws.workload

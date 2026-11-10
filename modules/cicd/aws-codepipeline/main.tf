@@ -97,6 +97,7 @@ resource "aws_codestarconnections_connection" "github" {
 # CodeBuild project (optional)
 ###############################################################################
 resource "aws_cloudwatch_log_group" "codebuild" {
+  #checkov:skip=CKV_AWS_158:Log-group CMK is consumer-supplied via kms_key_id; AWS-managed encryption by default
   count             = var.codebuild == null ? 0 : 1
   name              = "/aws/codebuild/${local.name}-build"
   retention_in_days = var.codebuild.log_retention_days
@@ -105,6 +106,7 @@ resource "aws_cloudwatch_log_group" "codebuild" {
 }
 
 resource "aws_codebuild_project" "this" {
+  #checkov:skip=CKV_AWS_147:CodeBuild CMK is consumer-supplied; AWS-managed key by default
   count        = var.codebuild == null ? 0 : 1
   name         = "${local.name}-build"
   service_role = var.codebuild_role_arn
@@ -156,6 +158,7 @@ resource "aws_codebuild_project" "this" {
 # Pipeline
 ###############################################################################
 resource "aws_codepipeline" "this" {
+  #checkov:skip=CKV_AWS_219:CodePipeline artifact-store CMK is consumer-supplied
   name           = "${local.name}-pipeline"
   role_arn       = var.codepipeline_role_arn
   pipeline_type  = var.pipeline_type

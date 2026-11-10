@@ -72,6 +72,8 @@ resource "aws_vpc_security_group_egress_rule" "all" {
 # Broker
 ###############################################################################
 resource "aws_mq_broker" "this" {
+  #checkov:skip=CKV_AWS_209:MQ broker CMK is consumer-supplied
+  #checkov:skip=CKV_AWS_48:MQ broker logging is consumer-configurable
   broker_name                = "${local.name}-mq"
   engine_type                = "RabbitMQ"
   engine_version             = var.engine_version

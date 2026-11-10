@@ -8,7 +8,7 @@ lifecycle rules and bucket policy. Follows the ECV module standard.
 
 ```hcl
 module "assets" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/storage/aws-s3?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/storage/aws-s3?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

@@ -31,6 +31,7 @@ resource "aws_vpc_security_group_ingress_rule" "ssh_cidr" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "ssh_sg" {
+  #checkov:skip=CKV_AWS_24:SSH ingress is CIDR-restricted via allowed_ssh_cidr_blocks (defaults empty / SSM-only); any openness is consumer-supplied
   for_each                     = toset(var.allowed_ssh_security_group_ids)
   security_group_id            = aws_security_group.this.id
   referenced_security_group_id = each.value

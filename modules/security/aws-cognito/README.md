@@ -7,7 +7,7 @@ resource servers, and app clients, following the ECV module standard.
 
 ```hcl
 module "cognito" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/security/aws-cognito?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-cognito?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

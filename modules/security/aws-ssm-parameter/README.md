@@ -8,7 +8,7 @@ following the ECV module standard. Supports `String`, `SecureString`, and
 
 ```hcl
 module "ssm_parameters" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/security/aws-ssm-parameter?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-ssm-parameter?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

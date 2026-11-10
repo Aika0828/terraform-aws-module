@@ -8,7 +8,7 @@ following the ECV module standard.
 
 ```hcl
 module "redis" {
-  source = "git::https://gitlab.com/<group>/terraform-aws-modules.git//modules/database/aws-elasticache?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-elasticache?ref=v0.1.0"
 
   providers = { aws = aws.workload }
 

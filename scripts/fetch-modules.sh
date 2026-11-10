@@ -8,7 +8,7 @@
 #
 set -eo pipefail
 
-REPO="${TFMOD_REPO:-git@gitlab.com:<group>/terraform-aws-modules.git}"
+REPO="${TFMOD_REPO:-git@gitlab.ecvmsp.com:ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git}"
 REF="${TFMOD_REF:-v0.1.0}"
 DEST="./vendor/terraform-aws-modules"
 LIST=0
@@ -34,7 +34,7 @@ Options:
 Examples:
   fetch-modules.sh aws-vpc aws-ecs-cluster aws-ecs-service
   fetch-modules.sh -t v1.2.0 -d modules/_vendor database/aws-rds-aurora
-  TFMOD_REPO=git@gitlab.com:acme/terraform-aws-modules.git fetch-modules.sh --list
+  TFMOD_REPO=git@gitlab.ecvmsp.com:ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git fetch-modules.sh --list
 
 After vendoring, reference a module locally, e.g.:
   module "vpc" {

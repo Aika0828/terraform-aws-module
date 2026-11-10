@@ -1,5 +1,4 @@
 locals {
-  name        = "${var.project_name}-${var.environment}"
   bucket_name = var.bucket_name != null ? var.bucket_name : "${var.project_name}-${var.bucket_suffix}-${var.environment}"
 }
 
@@ -31,6 +30,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
 }
 
 resource "aws_s3_bucket_public_access_block" "this" {
+  #checkov:skip=CKV_AWS_53:Public access is blocked by default (block_public_access defaults all true); flags are consumer-overridable
+  #checkov:skip=CKV_AWS_54:Public access is blocked by default (block_public_access defaults all true); flags are consumer-overridable
+  #checkov:skip=CKV_AWS_55:Public access is blocked by default (block_public_access defaults all true); flags are consumer-overridable
+  #checkov:skip=CKV_AWS_56:Public access is blocked by default (block_public_access defaults all true); flags are consumer-overridable
   bucket = aws_s3_bucket.this.id
 
   block_public_acls       = var.block_public_access.block_public_acls
@@ -40,6 +43,7 @@ resource "aws_s3_bucket_public_access_block" "this" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  #checkov:skip=CKV_AWS_300:Abort-incomplete-multipart is set per consumer-defined lifecycle rule
   count = length(var.lifecycle_rules) > 0 ? 1 : 0
 
   bucket = aws_s3_bucket.this.id

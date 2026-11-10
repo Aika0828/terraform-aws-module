@@ -105,9 +105,9 @@ variable "capacity_provider" {
 # ECR
 ###############################################################################
 variable "ecr_image_tag_mutability" {
-  description = "ECR image tag mutability: MUTABLE or IMMUTABLE."
+  description = "ECR image tag mutability: MUTABLE or IMMUTABLE. Defaults to IMMUTABLE so published tags cannot be overwritten; set MUTABLE if your workflow reuses tags."
   type        = string
-  default     = "MUTABLE"
+  default     = "IMMUTABLE"
 }
 
 variable "ecr_scan_on_push" {

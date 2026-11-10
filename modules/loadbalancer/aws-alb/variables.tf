@@ -109,3 +109,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "drop_invalid_header_fields" {
+  description = "Drop HTTP headers with invalid fields at the ALB (security hardening). Defaults to true."
+  type        = bool
+  default     = true
+}
