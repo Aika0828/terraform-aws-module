@@ -2,7 +2,7 @@
 # Identity
 ###############################################################################
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of every resource name."
+  description = "Project identifier, used as the first part of every resource name."
   type        = string
 }
 
@@ -48,9 +48,9 @@ variable "resource_servers" {
   default = {}
 }
 
-variable "app_clients" {
+variable "user_pool_clients" {
   description = <<-EOT
-    Map of app clients to create. Each key is a suffix for the client name; the
+    Map of user pool clients to create. Each key is a suffix for the client name; the
     value configures its OAuth behaviour and the scopes it is granted.
   EOT
 

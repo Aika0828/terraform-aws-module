@@ -9,11 +9,11 @@ the route tables you pass.
 
 ```hcl
 module "endpoints" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-vpc-endpoints?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-vpc-endpoints?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   vpc_id             = "vpc-0123456789"

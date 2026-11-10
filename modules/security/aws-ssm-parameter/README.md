@@ -8,13 +8,13 @@ following the ECV module standard. Supports `String`, `SecureString`, and
 
 ```hcl
 module "ssm_parameters" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-ssm-parameter?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-ssm-parameter?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
-  path_prefix  = "/sample-app/dev"
+  path_prefix  = "/my-project/dev"
 
   parameters = {
     api_base_url = {

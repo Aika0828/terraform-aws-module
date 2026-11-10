@@ -3,9 +3,9 @@ locals {
 
   # Expand each AZ's per-tier CIDR lists into flat, keyed maps so every subnet
   # gets a stable resource address ("<az>-<index>").
-  application_subnet_map = merge([
+  private_subnet_map = merge([
     for az in var.availability_zones : {
-      for idx, cidr in az.application_subnet_cidrs :
+      for idx, cidr in az.private_subnet_cidrs :
       "${az.name}-${idx}" => { az_name = az.name, cidr = cidr, index = idx }
     }
   ]...)
@@ -33,8 +33,6 @@ locals {
 
   attach_transit_gateway = var.transit_gateway_id != ""
 }
-
-data "aws_region" "current" {}
 
 resource "aws_vpc" "this" {
   cidr_block           = var.vpc_cidr

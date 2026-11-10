@@ -8,11 +8,11 @@ encryption, following the ECV module standard.
 
 ```hcl
 module "dynamodb" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-dynamodb?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-dynamodb?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
 
   table_name = "cauth-tokens"
@@ -40,7 +40,7 @@ module "dynamodb" {
 ```
 
 The full table name is `"<project_name>-<environment>-<table_name>"`, e.g.
-`sample-app-dev-cauth-tokens`.
+`my-project-dev-cauth-tokens`.
 
 ## Providers
 

@@ -1,7 +1,7 @@
 # aws-hub-spoke
 
 A spoke VPC for a hub-and-spoke (transit gateway) topology. It creates the VPC
-with four subnet tiers — **application**, **database**, **transit-gateway** and
+with four subnet tiers — **private**, **database**, **transit-gateway** and
 **vpc-endpoint** — each with its own per-AZ route tables, plus the workload-side
 transit gateway attachment, interface/gateway VPC endpoints, and optional VPC
 flow logs. Subnets are declared per availability zone, so you control exactly how
@@ -11,25 +11,25 @@ many AZs and how many subnets per tier you span.
 
 ```hcl
 module "spoke" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-hub-spoke?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-hub-spoke?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
   vpc_cidr     = "10.20.0.0/16"
 
   availability_zones = [
     {
       name                         = "ap-southeast-1a"
-      application_subnet_cidrs     = ["10.20.0.0/24"]
+      private_subnet_cidrs         = ["10.20.0.0/24"]
       database_subnet_cidrs        = ["10.20.10.0/24"]
       transit_gateway_subnet_cidrs = ["10.20.20.0/28"]
       vpc_endpoint_subnet_cidrs    = ["10.20.30.0/24"]
     },
     {
       name                         = "ap-southeast-1b"
-      application_subnet_cidrs     = ["10.20.1.0/24"]
+      private_subnet_cidrs         = ["10.20.1.0/24"]
       database_subnet_cidrs        = ["10.20.11.0/24"]
       transit_gateway_subnet_cidrs = ["10.20.21.0/28"]
       vpc_endpoint_subnet_cidrs    = ["10.20.31.0/24"]
@@ -43,8 +43,8 @@ module "spoke" {
 }
 ```
 
-Key outputs: `vpc_id`, `application_subnet_ids`, `database_subnet_ids`,
-`first_application_subnet_per_az_ids`, `transit_gateway_attachment_id`,
+Key outputs: `vpc_id`, `private_subnet_ids`, `database_subnet_ids`,
+`first_private_subnet_per_az_ids`, `transit_gateway_attachment_id`,
 `interface_endpoint_ids`.
 
 ## Providers

@@ -1,32 +1,32 @@
 ###############################################################################
-# Application subnets
+# Private subnets
 ###############################################################################
-resource "aws_subnet" "application" {
-  for_each = local.application_subnet_map
+resource "aws_subnet" "private" {
+  for_each = local.private_subnet_map
 
   vpc_id            = aws_vpc.this.id
   cidr_block        = each.value.cidr
   availability_zone = each.value.az_name
 
-  tags = merge(var.tags, { Name = "${local.name}-app-${each.key}" })
+  tags = merge(var.tags, { Name = "${local.name}-private-${each.key}" })
 }
 
-resource "aws_route_table" "application" {
-  for_each = local.application_subnet_map
+resource "aws_route_table" "private" {
+  for_each = local.private_subnet_map
 
   vpc_id = aws_vpc.this.id
-  tags   = merge(var.tags, { Name = "${local.name}-rtb-app-${each.key}" })
+  tags   = merge(var.tags, { Name = "${local.name}-rtb-private-${each.key}" })
 }
 
-resource "aws_route_table_association" "application" {
-  for_each = local.application_subnet_map
+resource "aws_route_table_association" "private" {
+  for_each = local.private_subnet_map
 
-  subnet_id      = aws_subnet.application[each.key].id
-  route_table_id = aws_route_table.application[each.key].id
+  subnet_id      = aws_subnet.private[each.key].id
+  route_table_id = aws_route_table.private[each.key].id
 }
 
-resource "aws_route" "application_tgw" {
-  for_each = local.attach_transit_gateway && var.transit_gateway_default_route ? aws_route_table.application : {}
+resource "aws_route" "private_tgw" {
+  for_each = local.attach_transit_gateway && var.transit_gateway_default_route ? aws_route_table.private : {}
 
   route_table_id         = each.value.id
   destination_cidr_block = "0.0.0.0/0"
@@ -131,4 +131,27 @@ resource "aws_route" "vpc_endpoint_tgw" {
   destination_cidr_block = "0.0.0.0/0"
   transit_gateway_id     = var.transit_gateway_id
   depends_on             = [aws_ec2_transit_gateway_vpc_attachment.this]
+}
+
+###############################################################################
+# State moves from the former "application" tier naming
+###############################################################################
+moved {
+  from = aws_subnet.application
+  to   = aws_subnet.private
+}
+
+moved {
+  from = aws_route_table.application
+  to   = aws_route_table.private
+}
+
+moved {
+  from = aws_route_table_association.application
+  to   = aws_route_table_association.private
+}
+
+moved {
+  from = aws_route.application_tgw
+  to   = aws_route.private_tgw
 }

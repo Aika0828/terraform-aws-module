@@ -22,13 +22,13 @@ resource "aws_subnet" "public" {
   tags = merge(var.tags, { Name = "${local.name}-public-${each.key}" })
 }
 
-resource "aws_subnet" "app" {
-  for_each          = var.app_subnet_cidrs
+resource "aws_subnet" "private" {
+  for_each          = var.private_subnet_cidrs
   vpc_id            = aws_vpc.this.id
   cidr_block        = each.value
   availability_zone = each.key
 
-  tags = merge(var.tags, { Name = "${local.name}-app-${each.key}" })
+  tags = merge(var.tags, { Name = "${local.name}-private-${each.key}" })
 }
 
 resource "aws_subnet" "isolated" {
@@ -84,23 +84,23 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# App -> NAT gateway
-resource "aws_route_table" "app" {
+# Private -> NAT gateway
+resource "aws_route_table" "private" {
   vpc_id = aws_vpc.this.id
-  tags   = merge(var.tags, { Name = "${local.name}-rtb-app" })
+  tags   = merge(var.tags, { Name = "${local.name}-rtb-private" })
 }
 
-resource "aws_route" "app_nat" {
+resource "aws_route" "private_nat" {
   count                  = var.enable_nat_gateway ? 1 : 0
-  route_table_id         = aws_route_table.app.id
+  route_table_id         = aws_route_table.private.id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.this[0].id
 }
 
-resource "aws_route_table_association" "app" {
-  for_each       = aws_subnet.app
+resource "aws_route_table_association" "private" {
+  for_each       = aws_subnet.private
   subnet_id      = each.value.id
-  route_table_id = aws_route_table.app.id
+  route_table_id = aws_route_table.private.id
 }
 
 # Isolated -> no egress route by default (local only)
@@ -113,4 +113,27 @@ resource "aws_route_table_association" "isolated" {
   for_each       = aws_subnet.isolated
   subnet_id      = each.value.id
   route_table_id = aws_route_table.isolated.id
+}
+
+###############################################################################
+# State moves from the former "app" tier naming
+###############################################################################
+moved {
+  from = aws_subnet.app
+  to   = aws_subnet.private
+}
+
+moved {
+  from = aws_route_table.app
+  to   = aws_route_table.private
+}
+
+moved {
+  from = aws_route.app_nat
+  to   = aws_route.private_nat
+}
+
+moved {
+  from = aws_route_table_association.app
+  to   = aws_route_table_association.private
 }

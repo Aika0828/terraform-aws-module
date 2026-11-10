@@ -9,11 +9,11 @@ CloudWatch alarm on Lambda failures. Follows the ECV module standard.
 
 ```hcl
 module "rds_backup_lifecycle" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-backup-lifecycle?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-backup-lifecycle?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
 
   # The execution role is created OUTSIDE this module (NO-IAM rule). It must
@@ -21,7 +21,7 @@ module "rds_backup_lifecycle" {
   # DeleteDBSnapshot/AddTagsToResource/ListTagsForResource and CloudWatch Logs.
   lambda_role_arn = "arn:aws:iam::111122223333:role/rds-backup-lifecycle-role"
 
-  db_instance_identifier = "sample-app-dev-payment"
+  db_instance_identifier = "my-project-dev-db"
   retention_days         = 7
   create_schedule_cron   = "0 18 * * ? *"
   cleanup_schedule_cron  = "30 18 * * ? *"

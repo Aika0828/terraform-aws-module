@@ -1,4 +1,4 @@
-"""Daily RDS manual-snapshot lifecycle for the payment app database.
+"""Daily RDS manual-snapshot lifecycle for a single RDS instance.
 
 Rendered by Terraform templatefile() at packaging time.
 """

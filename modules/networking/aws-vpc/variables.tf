@@ -1,5 +1,5 @@
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of every resource name."
+  description = "Project identifier, used as the first part of every resource name."
   type        = string
 }
 
@@ -23,8 +23,8 @@ variable "public_subnet_cidrs" {
   type        = map(string)
 }
 
-variable "app_subnet_cidrs" {
-  description = "Private application subnet CIDRs, keyed by availability zone. Routed to the internet via NAT."
+variable "private_subnet_cidrs" {
+  description = "Private subnet CIDRs, keyed by availability zone. Routed to the internet via NAT."
   type        = map(string)
 }
 
@@ -35,7 +35,7 @@ variable "isolated_subnet_cidrs" {
 }
 
 variable "enable_nat_gateway" {
-  description = "Create a NAT gateway so the app/isolated subnets can reach the internet."
+  description = "Create a NAT gateway so the private subnets can reach the internet."
   type        = bool
   default     = true
 }

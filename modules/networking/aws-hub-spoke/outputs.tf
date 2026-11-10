@@ -8,9 +8,9 @@ output "vpc_cidr_block" {
   value       = aws_vpc.this.cidr_block
 }
 
-output "application_subnet_ids" {
-  description = "Application subnet IDs (list)."
-  value       = [for s in aws_subnet.application : s.id]
+output "private_subnet_ids" {
+  description = "Private subnet IDs (list)."
+  value       = [for s in aws_subnet.private : s.id]
 }
 
 output "database_subnet_ids" {
@@ -28,19 +28,19 @@ output "vpc_endpoint_subnet_ids" {
   value       = [for s in aws_subnet.vpc_endpoint : s.id]
 }
 
-output "first_application_subnet_per_az_ids" {
-  description = "One application subnet ID per availability zone (the index-0 subnet in each AZ)."
+output "first_private_subnet_per_az_ids" {
+  description = "One private subnet ID per availability zone (the index-0 subnet in each AZ)."
   value = [
-    for az in distinct([for v in local.application_subnet_map : v.az_name]) :
-    aws_subnet.application[one([
-      for k, v in local.application_subnet_map : k if v.az_name == az && v.index == 0
+    for az in distinct([for v in local.private_subnet_map : v.az_name]) :
+    aws_subnet.private[one([
+      for k, v in local.private_subnet_map : k if v.az_name == az && v.index == 0
     ])].id
   ]
 }
 
-output "application_route_table_ids" {
-  description = "Application route table IDs (list)."
-  value       = [for rt in aws_route_table.application : rt.id]
+output "private_route_table_ids" {
+  description = "Private route table IDs (list)."
+  value       = [for rt in aws_route_table.private : rt.id]
 }
 
 output "database_route_table_ids" {

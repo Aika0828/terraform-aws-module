@@ -1,5 +1,5 @@
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of every resource name."
+  description = "Project identifier, used as the first part of every resource name."
   type        = string
 }
 

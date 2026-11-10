@@ -8,16 +8,16 @@ ECV module standard.
 
 ```hcl
 module "rds" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-instance?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-instance?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
 
   vpc_id                     = "vpc-0123456789"
   subnet_ids                 = ["subnet-aaa", "subnet-bbb"]
-  allowed_security_group_ids = ["sg-app"]
+  allowed_security_group_ids = ["sg-0123456789abcdef0"]
 
   database_name  = "finapp"
   engine         = "postgres"

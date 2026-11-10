@@ -8,11 +8,11 @@ creates the DNS validation records and waits for the certificate to be issued.
 
 ```hcl
 module "acm" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/edge/aws-acm?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/edge/aws-acm?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
 
   domain_name               = "app.example.com"

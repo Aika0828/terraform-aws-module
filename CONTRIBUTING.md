@@ -19,7 +19,7 @@ to the standard. Checklist before opening an MR:
 - [ ] Every variable has a `type` and a `description`.
 - [ ] Identity comes from `project_name` + `environment`.
 - [ ] Sensible `validation {}` blocks where it prevents foot-guns.
-- [ ] No hardcoded app/env-specific names — all parameterized.
+- [ ] No hardcoded project/env-specific names — all parameterized.
 - [ ] Creates **no** IAM roles or policies — any role the module needs is passed in
       as an ARN variable (e.g. `execution_role_arn`).
 

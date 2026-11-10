@@ -7,7 +7,7 @@ many modules, each consumed by a pinned git tag.
 
 ```hcl
 module "aurora" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-aurora?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-aurora?ref=v0.2.0"
 
   providers = { aws = aws.workload }
   # ...inputs...
@@ -59,9 +59,8 @@ modules/<domain>/aws-<resource>/   # the modules
 | observability | [aws-cloudwatch](modules/observability/aws-cloudwatch) · [aws-newrelic](modules/observability/aws-newrelic) |
 | bootstrap | [aws-tfstate-backend](modules/bootstrap/aws-tfstate-backend) |
 | cicd | [aws-codepipeline](modules/cicd/aws-codepipeline) |
-| patterns | [aws-ecs-app](modules/patterns/aws-ecs-app) — composite (ECR + ALB + ECS service) |
 
-All 33 modules pass `terraform fmt`, `terraform validate`, and follow the standard below.
+All 32 modules pass `terraform fmt`, `terraform validate`, and follow the standard below.
 
 ## The module standard
 
@@ -78,7 +77,7 @@ Every module must:
    (`Environment`, `map-migrated`, `TerraformManaged`); only `merge()` a `Name`
    and `var.tags` in the module.
 7. Describe every output; mark secrets `sensitive`.
-8. Hardcode no app/env-specific names — everything is a variable.
+8. Hardcode no project/env-specific names — everything is a variable.
 9. Pass `fmt`, `validate`, `tflint`, `checkov` in CI.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full checklist.

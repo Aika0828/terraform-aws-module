@@ -13,15 +13,13 @@ locals {
         Effect    = "Allow"
         Principal = { AWS = "*" }
         Action    = "es:*"
-        Resource  = "arn:aws:es:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:domain/${local.domain_name}/*"
+        Resource  = "arn:aws:es:${split(":", aws_security_group.this.arn)[3]}:${data.aws_caller_identity.current.account_id}:domain/${local.domain_name}/*"
       }
     ]
   })
 
   access_policies = coalesce(var.access_policies, local.default_access_policies)
 }
-
-data "aws_region" "current" {}
 
 data "aws_caller_identity" "current" {}
 

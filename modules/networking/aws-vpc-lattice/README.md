@@ -10,11 +10,11 @@ creates CNAME records for each service's custom domain.
 
 ```hcl
 module "lattice" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-vpc-lattice?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-vpc-lattice?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   create_service_network    = true
@@ -26,7 +26,7 @@ module "lattice" {
   services = {
     payments = {
       auth_type          = "AWS_IAM"
-      custom_domain_name = "payments.internal.fin-app.example.com"
+      custom_domain_name = "orders.internal.my-project.example.com"
       certificate_arn    = "arn:aws:acm:ap-southeast-1:111122223333:certificate/abc"
       principals         = ["arn:aws:iam::111122223333:root"]
       target_group = {

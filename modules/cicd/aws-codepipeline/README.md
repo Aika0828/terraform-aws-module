@@ -13,11 +13,11 @@ overrides the injected value.
 
 ```hcl
 module "pipeline" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/cicd/aws-codepipeline?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/cicd/aws-codepipeline?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   codepipeline_role_arn = aws_iam_role.codepipeline.arn

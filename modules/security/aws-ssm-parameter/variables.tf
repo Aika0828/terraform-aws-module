@@ -2,7 +2,7 @@
 # Identity
 ###############################################################################
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of every parameter name."
+  description = "Project identifier, used as the first part of every parameter name."
   type        = string
 }
 
@@ -17,7 +17,7 @@ variable "environment" {
 }
 
 variable "path_prefix" {
-  description = "Optional leading path for every parameter name, e.g. /sample-app/dev. When null, parameters are named <project>-<environment>-<name>."
+  description = "Optional leading path for every parameter name, e.g. /my-project/dev. When null, parameters are named <project>-<environment>-<name>."
   type        = string
   default     = null
 }

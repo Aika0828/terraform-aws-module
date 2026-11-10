@@ -11,29 +11,29 @@ both simple records (A/CNAME/TXT…) and alias records (ALB, VPC Lattice, etc.).
 
 ```hcl
 module "dns" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-route53?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-route53?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   create_zone = true
   zone = {
-    name    = "internal.fin-app.example.com"
+    name    = "internal.my-project.example.com"
     private = true
     vpc_ids = ["vpc-0123456789"]
   }
 
   records = {
     api = {
-      name    = "api.internal.fin-app.example.com"
+      name    = "api.internal.my-project.example.com"
       type    = "CNAME"
       ttl     = 300
       records = ["abcd1234.vpc-lattice-svcs.ap-southeast-1.on.aws"]
     }
     alb = {
-      name = "app.internal.fin-app.example.com"
+      name = "app.internal.my-project.example.com"
       type = "A"
       alias = {
         name                   = "dualstack.my-alb-123.ap-southeast-1.elb.amazonaws.com"
@@ -49,11 +49,11 @@ module "dns" {
 
 ```hcl
 module "dns_records" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-route53?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/networking/aws-route53?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   create_zone = false

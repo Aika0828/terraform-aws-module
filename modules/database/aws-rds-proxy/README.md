@@ -8,16 +8,16 @@ group, following the ECV module standard.
 
 ```hcl
 module "rds_proxy" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-proxy?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/database/aws-rds-proxy?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
 
   vpc_id                     = "vpc-0123456789"
   vpc_subnet_ids             = ["subnet-aaa", "subnet-bbb"]
-  allowed_security_group_ids = ["sg-app"]
+  allowed_security_group_ids = ["sg-0123456789abcdef0"]
 
   engine_family = "POSTGRESQL"
   port          = 5432
@@ -27,7 +27,7 @@ module "rds_proxy" {
   secret_arns = ["arn:aws:secretsmanager:ap-southeast-1:111122223333:secret:rds-creds-abc123"]
 
   # Register exactly one target:
-  db_cluster_identifier = "sample-app-dev-aurora"
+  db_cluster_identifier = "my-project-dev-aurora"
 }
 ```
 

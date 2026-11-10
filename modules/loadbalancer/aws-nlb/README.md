@@ -12,15 +12,15 @@ is created per (listener port, source) combination.
 
 ```hcl
 module "nlb" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/loadbalancer/aws-nlb?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/loadbalancer/aws-nlb?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   vpc_id     = module.vpc.vpc_id
-  subnet_ids = module.vpc.app_subnet_id_list
+  subnet_ids = module.vpc.private_subnet_id_list
   internal   = true
 
   ingress_cidr_blocks = ["10.0.0.0/16"]

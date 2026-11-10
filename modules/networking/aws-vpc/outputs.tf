@@ -13,9 +13,9 @@ output "public_subnet_ids" {
   value       = { for az, s in aws_subnet.public : az => s.id }
 }
 
-output "app_subnet_ids" {
-  description = "App subnet IDs keyed by availability zone."
-  value       = { for az, s in aws_subnet.app : az => s.id }
+output "private_subnet_ids" {
+  description = "Private subnet IDs keyed by availability zone."
+  value       = { for az, s in aws_subnet.private : az => s.id }
 }
 
 output "isolated_subnet_ids" {
@@ -28,9 +28,9 @@ output "public_subnet_id_list" {
   value       = [for s in aws_subnet.public : s.id]
 }
 
-output "app_subnet_id_list" {
-  description = "App subnet IDs as a list (for modules that take list(string))."
-  value       = [for s in aws_subnet.app : s.id]
+output "private_subnet_id_list" {
+  description = "Private subnet IDs as a list (for modules that take list(string))."
+  value       = [for s in aws_subnet.private : s.id]
 }
 
 output "isolated_subnet_id_list" {

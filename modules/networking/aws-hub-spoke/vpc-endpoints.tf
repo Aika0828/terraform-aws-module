@@ -1,9 +1,9 @@
 locals {
-  region = data.aws_region.current.name
+  region = split(":", aws_vpc.this.arn)[3]
 
   # All workload route tables a gateway endpoint should be reachable from.
   gateway_endpoint_route_table_ids = concat(
-    [for rt in aws_route_table.application : rt.id],
+    [for rt in aws_route_table.private : rt.id],
     [for rt in aws_route_table.database : rt.id],
     [for rt in aws_route_table.vpc_endpoint : rt.id],
   )

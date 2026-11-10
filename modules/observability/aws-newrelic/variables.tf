@@ -2,7 +2,7 @@
 # Identity
 ###############################################################################
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of the linked account name."
+  description = "Project identifier, used as the first part of the linked account name."
   type        = string
 }
 

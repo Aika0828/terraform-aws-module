@@ -17,18 +17,18 @@ output "domain" {
   description = "The hosted-UI domain URL, or null when no domain is configured."
   value = (
     var.domain_prefix != null
-    ? "https://${aws_cognito_user_pool_domain.this[0].domain}.auth.${data.aws_region.current.name}.amazoncognito.com"
+    ? "https://${aws_cognito_user_pool_domain.this[0].domain}.auth.${split(":", aws_cognito_user_pool.this.arn)[3]}.amazoncognito.com"
     : null
   )
 }
 
 output "client_ids" {
-  description = "Map of app-client key to its client ID."
+  description = "Map of user-pool-client key to its client ID."
   value       = { for k, v in aws_cognito_user_pool_client.this : k => v.id }
 }
 
 output "client_secrets" {
-  description = "Map of app-client key to its client secret (empty for clients created without a secret)."
+  description = "Map of user-pool-client key to its client secret (empty for clients created without a secret)."
   value       = { for k, v in aws_cognito_user_pool_client.this : k => v.client_secret }
   sensitive   = true
 }

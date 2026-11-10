@@ -2,8 +2,6 @@ locals {
   name = "${var.project_name}-${var.environment}"
 }
 
-data "aws_region" "current" {}
-
 resource "aws_cognito_user_pool" "this" {
   name = local.name
 
@@ -38,7 +36,7 @@ resource "aws_cognito_resource_server" "this" {
 }
 
 resource "aws_cognito_user_pool_client" "this" {
-  for_each = var.app_clients
+  for_each = var.user_pool_clients
 
   name         = "${local.name}-${each.key}"
   user_pool_id = aws_cognito_user_pool.this.id

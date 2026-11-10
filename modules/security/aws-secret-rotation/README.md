@@ -9,11 +9,11 @@ the Lambda's `role_arn`.
 
 ```hcl
 module "secret_rotation" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-secret-rotation?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/security/aws-secret-rotation?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   role_arn   = var.rotation_role_arn      # an existing role ARN you provide

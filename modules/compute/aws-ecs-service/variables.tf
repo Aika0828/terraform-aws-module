@@ -1,5 +1,5 @@
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of every resource name."
+  description = "Project identifier, used as the first part of every resource name."
   type        = string
 }
 
@@ -28,9 +28,8 @@ variable "cluster_arn" {
 # Task / container
 ###############################################################################
 variable "container_name" {
-  description = "Name of the primary container."
+  description = "Name of the primary container (also used as the log stream prefix and load balancer container name)."
   type        = string
-  default     = "app"
 }
 
 variable "container_image" {
@@ -119,7 +118,7 @@ variable "vpc_id" {
 }
 
 variable "subnet_ids" {
-  description = "Subnets the tasks run in (usually the private app subnets)."
+  description = "Subnets the tasks run in (usually private subnets)."
   type        = list(string)
 }
 

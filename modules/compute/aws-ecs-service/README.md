@@ -10,31 +10,29 @@ load-balancer target group are passed in — this module does **not** create the
 
 ```hcl
 module "ecs_service" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/compute/aws-ecs-service?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/compute/aws-ecs-service?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 
   cluster_arn        = module.ecs_cluster.cluster_arn
   execution_role_arn = var.ecs_execution_role_arn # an existing role ARN you provide
   task_role_arn      = var.ecs_task_role_arn
 
-  container_image = "${aws_ecr_repository.app.repository_url}:latest"
-  container_port  = 8080
-  task_cpu        = 512
-  task_memory     = 1024
+  container_name  = var.service.container_name
+  container_image = var.service.container_image # e.g. <account>.dkr.ecr.<region>.amazonaws.com/<repo>:<tag>
+  container_port  = var.service.container_port
+  task_cpu        = var.service.task_cpu
+  task_memory     = var.service.task_memory
 
   vpc_id                     = module.vpc.vpc_id
-  subnet_ids                 = module.vpc.app_subnet_id_list
+  subnet_ids                 = module.vpc.private_subnet_id_list
   ingress_security_group_ids = [module.alb.security_group_id]
   target_group_arn           = module.alb.target_group_arn
 
-  environment_variables = {
-    LOG_CHANNEL = "stderr"
-    TZ          = "Asia/Manila"
-  }
+  environment_variables = var.service.environment_variables
 }
 ```
 

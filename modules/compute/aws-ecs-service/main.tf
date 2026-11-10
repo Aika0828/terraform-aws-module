@@ -7,9 +7,6 @@ locals {
   ]
 }
 
-data "aws_region" "current" {
-}
-
 resource "aws_cloudwatch_log_group" "this" {
   #checkov:skip=CKV_AWS_158:Log-group CMK is consumer-supplied via kms_key_id; AWS-managed encryption by default
   #checkov:skip=CKV_AWS_338:Log retention is environment-driven (retention_in_days); not pinned in a reusable module
@@ -81,7 +78,7 @@ resource "aws_ecs_task_definition" "this" {
         logDriver = "awslogs"
         options = {
           awslogs-group         = aws_cloudwatch_log_group.this.name
-          awslogs-region        = data.aws_region.current.name
+          awslogs-region        = split(":", aws_cloudwatch_log_group.this.arn)[3]
           awslogs-stream-prefix = var.container_name
         }
       }

@@ -13,11 +13,11 @@ policies you own.
 
 ```hcl
 module "tfstate_backend" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/bootstrap/aws-tfstate-backend?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/bootstrap/aws-tfstate-backend?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "fin-app"
+  project_name = "my-project"
   environment  = "dev"
 }
 ```
@@ -27,7 +27,7 @@ Then point the backend at the created resources:
 ```hcl
 terraform {
   backend "s3" {
-    bucket       = "fin-app-dev-tfstate"
+    bucket       = "my-project-dev-tfstate"
     key          = "infra/terraform.tfstate"
     region       = "ap-southeast-1"
     use_lockfile = true # native S3 state locking (Terraform >= 1.10)

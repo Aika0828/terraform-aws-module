@@ -2,7 +2,7 @@
 # Identity
 ###############################################################################
 variable "project_name" {
-  description = "Project / application identifier, used as the first part of every resource name."
+  description = "Project identifier, used as the first part of every resource name."
   type        = string
 }
 
@@ -31,7 +31,7 @@ variable "availability_zones" {
   EOT
   type = list(object({
     name                         = string
-    application_subnet_cidrs     = optional(list(string), [])
+    private_subnet_cidrs         = optional(list(string), [])
     database_subnet_cidrs        = optional(list(string), [])
     transit_gateway_subnet_cidrs = optional(list(string), [])
     vpc_endpoint_subnet_cidrs    = optional(list(string), [])

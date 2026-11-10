@@ -7,21 +7,21 @@ following the ECV module standard.
 
 ```hcl
 module "rabbitmq" {
-  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/messaging/aws-amazonmq?ref=v0.1.0"
+  source = "git::https://gitlab.ecvmsp.com/ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git//modules/messaging/aws-amazonmq?ref=v0.2.0"
 
   providers = { aws = aws.workload }
 
-  project_name = "sample-app"
+  project_name = "my-project"
   environment  = "dev"
 
   vpc_id                     = "vpc-0123456789"
   subnet_ids                 = ["subnet-aaa", "subnet-bbb"]
-  allowed_security_group_ids = ["sg-app"]
+  allowed_security_group_ids = ["sg-0123456789abcdef0"]
 
   host_instance_type = "mq.m7g.medium"
   deployment_mode    = "CLUSTER_MULTI_AZ"
 
-  admin_username = "app_mq_user"
+  admin_username = "mq_admin"
   admin_password = var.rabbitmq_admin_password # sensitive; sourced from Secrets Manager / TF vars
 }
 ```
