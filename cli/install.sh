@@ -9,6 +9,10 @@
 #   PREFIX        install dir (default: ~/.local/bin)
 #   ECV_TF_REPO   library repo to fetch from when not run from a clone
 #   ECV_TF_REF    release to fetch (default: latest vX.Y.Z tag)
+#   ECV_TF_NO_MODIFY_PATH=1   don't add PREFIX to your shell startup file
+#
+# If PREFIX isn't on your PATH, one `export PATH=...` line is appended to
+# ~/.zshrc (zsh), ~/.bash_profile / ~/.bashrc (bash) or ~/.profile (others).
 #
 set -eo pipefail
 
@@ -49,9 +53,32 @@ if [ -n "${ECV_TF_REPO:-}" ]; then
   echo "Set global repo = $ECV_TF_REPO"
 fi
 
+# Put PREFIX on the PATH for future terminals by adding one line to the shell's
+# startup file. (An `export` here alone would vanish when this script exits.)
 case ":$PATH:" in
-  *":$PREFIX:"*) ;;
-  *) echo ""
-     echo "Add $PREFIX to your PATH, e.g. in ~/.zshrc:"
-     echo "  export PATH=\"$PREFIX:\$PATH\"";;
+  *":$PREFIX:"*) exit 0;;   # already on PATH
 esac
+
+case "$PREFIX" in
+  "$HOME"/*) path_dir="\$HOME/${PREFIX#"$HOME"/}";;
+  *)         path_dir="$PREFIX";;
+esac
+path_line="export PATH=\"$path_dir:\$PATH\""
+
+case "$(basename "${SHELL:-}")" in
+  zsh)  rc="${ZDOTDIR:-$HOME}/.zshrc";;
+  bash) if [ "$(uname)" = "Darwin" ]; then rc="$HOME/.bash_profile"; else rc="$HOME/.bashrc"; fi;;
+  *)    rc="$HOME/.profile";;
+esac
+
+echo ""
+if [ "${ECV_TF_NO_MODIFY_PATH:-}" = "1" ]; then
+  echo "$PREFIX is not on your PATH. Add this line to $rc:"
+  echo "  $path_line"
+elif [ -f "$rc" ] && { grep -qF "$path_line" "$rc" || grep -qF "$PREFIX" "$rc"; }; then
+  echo "$rc already adds $PREFIX to PATH — open a new terminal (or: source $rc)."
+else
+  printf '\n# Added by the ecv-tf installer\n%s\n' "$path_line" >> "$rc"
+  echo "Added $PREFIX to PATH in $rc"
+  echo "Open a new terminal, or run:  source $rc"
+fi

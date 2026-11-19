@@ -24,8 +24,10 @@ git clone --depth 1 git@gitlab.ecvmsp.com:ecv-ph-tech-team/ph-modernization-team
   && /tmp/tfmod/cli/install.sh && rm -rf /tmp/tfmod
 ```
 
-Use `PREFIX=/usr/local/bin` to install elsewhere. Later, update the CLI with
-`ecv-tf upgrade --self`.
+If `~/.local/bin` isn't on your `PATH`, the installer adds one line to
+`~/.zshrc` (or `~/.bash_profile` / `~/.profile`); open a new terminal afterwards.
+Set `ECV_TF_NO_MODIFY_PATH=1` to skip that, or `PREFIX=/usr/local/bin` to install
+elsewhere. Later, update the CLI with `ecv-tf upgrade --self`.
 
 Can't reach GitLab? Point it at the GitHub mirror:
 
