@@ -18,6 +18,19 @@ Then `terraform init`. Always pin `?ref=vX.Y.Z` — never a branch. See the
 [consuming root example](../example-live) for the single-root + per-env tfvars
 pattern (no `environments/dev` folders).
 
+### The `ecv-tf` CLI (recommended)
+
+[`cli/ecv-tf`](cli/README.md) wraps all of this into package-manager-style commands:
+
+```bash
+./cli/install.sh                          # installs ecv-tf to ~/.local/bin
+ecv-tf init my-app -p myapp -e dev        # scaffold a consumer project, pin the latest release
+cd my-app && ecv-tf install -m vpc,alb --write
+ecv-tf upgrade --check                    # later: see what a newer release changes
+```
+
+See [cli/README.md](cli/README.md) for every command.
+
 ### Vendor only the modules you need
 
 To pull a *local copy* of just some modules (offline/air-gapped use, or to vendor

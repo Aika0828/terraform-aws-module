@@ -1,0 +1,1010 @@
+#!/usr/bin/env bash
+#
+# ecv-tf — command-line tool for the ECV Terraform AWS module library.
+#
+#   ecv-tf config    show / change settings (repo, ref, dest, source)
+#   ecv-tf init      scaffold a new consumer project
+#   ecv-tf list      list modules (or versions) available in the library
+#   ecv-tf install   add modules to the project, pinned in ecv-tf.lock
+#   ecv-tf upgrade   move installed modules to a newer release (or --self)
+#   ecv-tf help      help for any command
+#
+# Needs only bash (3.2+) and git. Terraform itself still does the real work.
+#
+set -eo pipefail
+
+ECV_TF_VERSION="0.1.0"
+
+DEFAULT_REPO="git@gitlab.ecvmsp.com:ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git"
+DEFAULT_REF="latest"
+DEFAULT_DEST="modules/terraform-aws-modules"
+DEFAULT_SOURCE="modules"
+
+GLOBAL_CONFIG="${ECV_TF_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/ecv-tf/config}"
+PROJECT_FILE=".ecv-tf"
+LOCK_FILE="ecv-tf.lock"
+
+###############################################################################
+# Output helpers
+###############################################################################
+if [ -t 2 ] && [ -z "${NO_COLOR:-}" ]; then
+  B=$'\033[1m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; D=$'\033[2m'; N=$'\033[0m'
+else
+  B=""; G=""; Y=""; R=""; D=""; N=""
+fi
+info() { printf '%s\n' "$*" >&2; }
+ok()   { printf '%s✓%s %s\n' "$G" "$N" "$*" >&2; }
+warn() { printf '%swarning:%s %s\n' "$Y" "$N" "$*" >&2; }
+die()  { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+usage_error() { printf '%serror:%s %s\n' "$R" "$N" "$1" >&2; info "Run 'ecv-tf help $2' for usage."; exit 2; }
+
+TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/ecv-tf.XXXXXX")"
+trap 'rm -rf "$TMP_ROOT"' EXIT
+
+###############################################################################
+# Configuration
+#   precedence: command flags > env ECV_TF_<KEY> > project .ecv-tf > global > default
+###############################################################################
+find_project_root() {
+  local d="$PWD"
+  while [ -n "$d" ] && [ "$d" != "/" ]; do
+    if [ -f "$d/$PROJECT_FILE" ]; then printf '%s' "$d"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+PROJECT_ROOT="$(find_project_root || true)"
+PROJECT_DIR="${PROJECT_ROOT:-$PWD}"
+
+upper() { printf '%s' "$1" | tr '[:lower:]' '[:upper:]'; }
+
+valid_key() { case "$1" in repo|ref|dest|source) return 0;; *) return 1;; esac; }
+
+check_value() { # key value
+  [ -n "$2" ] || die "value for '$1' cannot be empty"
+  case "$1" in
+    source) case "$2" in modules|vendor|git) ;; *) die "source must be 'modules' or 'git'";; esac;;
+    dest)   case "$2" in /*|*..*) die "dest must be a relative path inside the project";; esac;;
+  esac
+}
+
+cfg_file_get() { # file key
+  local line
+  [ -f "$1" ] || return 1
+  line="$(grep -E "^[[:space:]]*$2[[:space:]]*=" "$1" | tail -n1 || true)"
+  [ -n "$line" ] || return 1
+  printf '%s' "${line#*=}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+cfg_file_write() { # file key [value]  (no value = unset)
+  local f="$1" k="$2" tmp="$TMP_ROOT/cfg.$$"
+  mkdir -p "$(dirname "$f")"
+  if [ -f "$f" ]; then grep -vE "^[[:space:]]*$k[[:space:]]*=" "$f" > "$tmp" || true; else : > "$tmp"; fi
+  if [ $# -ge 3 ]; then printf '%s = %s\n' "$k" "$3" >> "$tmp"; fi
+  cat "$tmp" > "$f"   # keep the file's existing permissions
+}
+
+cfg_resolve() { # key -> CFG_VAL, CFG_FROM
+  local key="$1" env v
+  env="ECV_TF_$(upper "$key")"
+  eval "v=\${$env:-}"
+  if [ -n "$v" ]; then CFG_VAL="$v"; CFG_FROM="env \$$env"; return; fi
+  if [ -n "$PROJECT_ROOT" ] && v="$(cfg_file_get "$PROJECT_ROOT/$PROJECT_FILE" "$key")"; then
+    CFG_VAL="$v"; CFG_FROM="project: $PROJECT_ROOT/$PROJECT_FILE"; return
+  fi
+  if v="$(cfg_file_get "$GLOBAL_CONFIG" "$key")"; then CFG_VAL="$v"; CFG_FROM="global: $GLOBAL_CONFIG"; return; fi
+  eval "CFG_VAL=\$DEFAULT_$(upper "$key")"; CFG_FROM="default"
+}
+cfg() { cfg_resolve "$1"; printf '%s' "$CFG_VAL"; }
+
+# Fill REPO / REF / DEST / SOURCE from flags (OPT_*) or config.
+OPT_REPO=""; OPT_REF=""; OPT_DEST=""; OPT_SOURCE=""
+load_settings() {
+  REPO="${OPT_REPO:-$(cfg repo)}"
+  REF="${OPT_REF:-$(cfg ref)}"
+  DEST="${OPT_DEST:-$(cfg dest)}"
+  SOURCE="${OPT_SOURCE:-$(cfg source)}"
+  check_value dest "$DEST"; check_value source "$SOURCE"
+  [ "$SOURCE" = "vendor" ] && SOURCE="modules"   # old name for the copy mode
+  DEST="${DEST%/}"; DEST="${DEST#./}"
+}
+
+###############################################################################
+# Library repo access (one blobless clone per run: all tags, no file contents
+# until a module is actually checked out)
+###############################################################################
+REPO_DIR=""
+repo_clone() {
+  [ -n "$REPO_DIR" ] && return 0
+  command -v git >/dev/null 2>&1 || die "git is required"
+  REPO_DIR="$TMP_ROOT/repo"
+  info "${D}Fetching module index from $REPO ...${N}"
+  if ! git clone --quiet --no-checkout --filter=blob:none "$REPO" "$REPO_DIR" >/dev/null 2>"$TMP_ROOT/clone.err"; then
+    sed 's/^/  /' "$TMP_ROOT/clone.err" >&2
+    die "could not clone $REPO — check 'ecv-tf config' (repo) and your git access (SSH key / token)."
+  fi
+}
+
+# Release tags (vX.Y.Z), oldest → newest.
+repo_tags() {
+  git -C "$REPO_DIR" tag -l \
+    | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+    | awk '{ s=$0; sub(/^v/, "", s); split(s, a, "."); print a[1], a[2], a[3], $0 }' \
+    | sort -k1,1n -k2,2n -k3,3n | awk '{ print $4 }' || true
+}
+
+# Resolve a ref (tag, branch, commit or "latest") -> REF_NAME, REF_REV.
+resolve_ref() {
+  local r="$1"
+  if [ "$r" = "latest" ]; then
+    r="$(repo_tags | tail -n1)"
+    [ -n "$r" ] || die "no release tags (vX.Y.Z) found in $REPO"
+  fi
+  if git -C "$REPO_DIR" rev-parse -q --verify "refs/tags/$r^{commit}" >/dev/null; then
+    REF_REV="refs/tags/$r"
+  elif git -C "$REPO_DIR" rev-parse -q --verify "refs/remotes/origin/$r^{commit}" >/dev/null; then
+    REF_REV="refs/remotes/origin/$r"
+    warn "'$r' is a branch, not a release tag — pin a tag (vX.Y.Z) for reproducible builds"
+  elif git -C "$REPO_DIR" rev-parse -q --verify "$r^{commit}" >/dev/null 2>&1; then
+    REF_REV="$r"
+    warn "'$r' is a raw commit, not a release tag"
+  else
+    die "ref '$r' not found in $REPO   (see: ecv-tf list --versions)"
+  fi
+  REF_NAME="$r"
+}
+
+repo_sha() { git -C "$REPO_DIR" rev-parse "$1^{commit}"; }
+
+# Modules present at a rev, as <domain>/<name>.
+repo_modules() {
+  git -C "$REPO_DIR" ls-tree -d -r --name-only "$1" -- modules 2>/dev/null \
+    | grep -E '^modules/[^/]+/aws-[^/]+$' | sed 's#^modules/##' | sort || true
+}
+
+# Turn what the user typed (vpc | aws-vpc | networking/aws-vpc) into domain/name.
+resolve_module() { # all-modules name
+  local all="$1" m="$2" match n
+  m="${m#modules/}"; m="${m%/}"
+  case "$m" in
+    */*) match="$(printf '%s\n' "$all" | grep -Fx -- "$m" || true)";;
+    *)   case "$m" in aws-*) ;; *) m="aws-$m";; esac
+         match="$(printf '%s\n' "$all" | awk -F/ -v n="$m" '$2 == n')";;
+  esac
+  n="$(printf '%s\n' "$match" | grep -c . || true)"
+  if [ "$n" -eq 0 ]; then
+    match="$(printf '%s\n' "$all" | grep -F -- "${2#aws-}" || true)"
+    if [ -n "$match" ]; then
+      info "error: module not found: $2 — did you mean:"; printf '%s\n' "$match" | sed 's/^/  /' >&2; exit 1
+    fi
+    die "module not found: $2   (see: ecv-tf list)"
+  fi
+  if [ "$n" -gt 1 ]; then
+    info "error: '$2' is ambiguous, matches:"; printf '%s\n' "$match" | sed 's/^/  /' >&2; exit 1
+  fi
+  printf '%s' "$match"
+}
+
+# Check out modules at a rev and copy them into the project's modules dir (DEST).
+repo_export() { # rev path...
+  local rev="$1" p sp=()
+  shift
+  for p in "$@"; do sp+=("modules/$p"); done
+  git -C "$REPO_DIR" sparse-checkout init --cone >/dev/null 2>&1 || true
+  git -C "$REPO_DIR" sparse-checkout set "${sp[@]}" >/dev/null 2>&1
+  if ! git -C "$REPO_DIR" -c advice.detachedHead=false checkout --quiet --detach "$rev" 2>"$TMP_ROOT/co.err"; then
+    cat "$TMP_ROOT/co.err" >&2; die "checkout of $rev failed"
+  fi
+  for p in "$@"; do
+    [ -d "$REPO_DIR/modules/$p" ] || die "modules/$p does not exist at $rev"
+    rm -rf "${PROJECT_DIR:?}/${DEST:?}/$p"
+    mkdir -p "$PROJECT_DIR/$DEST/$(dirname "$p")"
+    cp -R "$REPO_DIR/modules/$p" "$PROJECT_DIR/$DEST/$p"
+  done
+}
+
+###############################################################################
+# Lock file:  <domain>/<name>  <ref>  <commit>
+###############################################################################
+lock_path() { printf '%s/%s' "$PROJECT_DIR" "$LOCK_FILE"; }
+lock_entries() { local f; f="$(lock_path)"; [ -f "$f" ] && grep -vE '^[[:space:]]*(#|$)' "$f" || true; }
+lock_ref() { lock_entries | awk -v m="$1" '$1 == m { print $2 }'; }
+lock_sha() { lock_entries | awk -v m="$1" '$1 == m { print $3 }'; }
+
+lock_write() { # entries on stdin
+  {
+    echo "# ecv-tf.lock — managed by ecv-tf. Commit this file."
+    echo "# repo: $REPO"
+    echo "# module                             ref        commit"
+    sort -u | awk 'NF { printf "%-36s %-10s %s\n", $1, $2, $3 }'
+  } > "$TMP_ROOT/lock.new"
+  cat "$TMP_ROOT/lock.new" > "$(lock_path)"
+}
+
+lock_set() { # module ref sha
+  { lock_entries | awk -v m="$1" '$1 != m'; printf '%s %s %s\n' "$1" "$2" "$3"; } > "$TMP_ROOT/lock.tmp"
+  lock_write < "$TMP_ROOT/lock.tmp"
+}
+
+###############################################################################
+# Terraform snippets
+###############################################################################
+module_source() { # path ref
+  if [ "$SOURCE" = "git" ]; then printf 'git::%s//modules/%s?ref=%s' "$REPO" "$1" "$2"
+  else printf './%s/%s' "$DEST" "$1"; fi
+}
+
+module_snippet() { # path ref
+  local name
+  name="$(basename "$1")"; name="${name#aws-}"; name="$(printf '%s' "$name" | tr '-' '_')"
+  cat <<EOF
+module "$name" {
+  source    = "$(module_source "$1" "$2")"
+  providers = { aws = aws.workload }
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  # See $DEST/$1/README.md (or the library README) for all inputs.
+}
+EOF
+}
+
+# Append a module block to main.tf unless the project already references it.
+write_snippet() { # path ref
+  local f
+  for f in "$PROJECT_DIR"/*.tf; do
+    [ -f "$f" ] || continue
+    if grep -qF "modules/$1" "$f" 2>/dev/null; then
+      info "  ${D}$(basename "$f") already references $1 — not adding a block${N}"; return 0
+    fi
+  done
+  { echo; module_snippet "$1" "$2"; } >> "$PROJECT_DIR/main.tf"
+  ok "added module block for $1 to main.tf"
+}
+
+# In git-source mode, bump ?ref=OLD to ?ref=NEW for one module in top-level *.tf files.
+rewrite_git_refs() { # path old new
+  local f e_old
+  e_old="$(printf '%s' "$2" | sed 's/[][\.*^$|]/\\&/g')"
+  for f in "$PROJECT_DIR"/*.tf; do
+    [ -f "$f" ] || continue
+    if grep -qF "//modules/$1?ref=$2\"" "$f"; then
+      sed "s|//modules/$1?ref=$e_old\"|//modules/$1?ref=$3\"|g" "$f" > "$TMP_ROOT/rw"
+      cat "$TMP_ROOT/rw" > "$f"
+      info "  updated ref in $(basename "$f")"
+    fi
+  done
+}
+
+###############################################################################
+# ecv-tf config
+###############################################################################
+help_config() {
+  cat <<EOF
+${B}ecv-tf config${N} — show or change settings
+
+Usage:
+  ecv-tf config                          show effective settings and where each comes from
+  ecv-tf config get <key>
+  ecv-tf config set <key> <value> [--global | --project]
+  ecv-tf config unset <key>       [--global | --project]
+  ecv-tf config path                     print the config file locations
+
+Keys:
+  repo     git URL of the module library   (default: GitLab over SSH)
+  ref      release to use: vX.Y.Z or "latest"  (init pins this to a real tag)
+  dest     where copied modules go          (default: $DEFAULT_DEST)
+  source   modules | git
+             modules = copy modules into the project (default)
+             git     = no copy; reference git::<repo>//modules/...?ref=<tag>
+
+'set' and 'unset' write to the project file ($PROJECT_FILE) when you're inside a
+project, otherwise to the global file. --global / --project force one or the other.
+Environment variables ECV_TF_REPO, ECV_TF_REF, ECV_TF_DEST, ECV_TF_SOURCE override both.
+
+Examples:
+  ecv-tf config set --global repo https://github.com/Aika0828/terraform-aws-module.git
+  ecv-tf config set ref v0.2.0
+  ecv-tf config set source git
+EOF
+}
+
+cmd_config() {
+  local action="" scope="" args=() k file
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) help_config; return 0;;
+      --global)  scope=global; shift;;
+      --project) scope=project; shift;;
+      -*) usage_error "unknown option: $1" config;;
+      *) args+=("$1"); shift;;
+    esac
+  done
+  [ ${#args[@]} -gt 0 ] && action="${args[0]}"
+
+  case "$scope" in
+    global)  file="$GLOBAL_CONFIG";;
+    project) [ -n "$PROJECT_ROOT" ] || die "not inside an ecv-tf project (no $PROJECT_FILE found) — run 'ecv-tf init' first"
+             file="$PROJECT_ROOT/$PROJECT_FILE";;
+    *)       if [ -n "$PROJECT_ROOT" ]; then file="$PROJECT_ROOT/$PROJECT_FILE"; else file="$GLOBAL_CONFIG"; fi;;
+  esac
+
+  case "$action" in
+    ""|show|list)
+      printf '%sSettings%s\n' "$B" "$N"
+      for k in repo ref dest source; do
+        cfg_resolve "$k"
+        printf '  %-7s %s  %s(%s)%s\n' "$k" "$CFG_VAL" "$D" "$CFG_FROM" "$N"
+      done
+      ;;
+    get)
+      [ ${#args[@]} -eq 2 ] || usage_error "usage: ecv-tf config get <key>" config
+      valid_key "${args[1]}" || die "unknown key: ${args[1]} (keys: repo ref dest source)"
+      cfg "${args[1]}"; echo
+      ;;
+    set)
+      [ ${#args[@]} -eq 3 ] || usage_error "usage: ecv-tf config set <key> <value>" config
+      k="${args[1]}"
+      valid_key "$k" || die "unknown key: $k (keys: repo ref dest source)"
+      check_value "$k" "${args[2]}"
+      cfg_file_write "$file" "$k" "${args[2]}"
+      ok "$k = ${args[2]}   ${D}($file)${N}"
+      ;;
+    unset)
+      [ ${#args[@]} -eq 2 ] || usage_error "usage: ecv-tf config unset <key>" config
+      valid_key "${args[1]}" || die "unknown key: ${args[1]}"
+      [ -f "$file" ] && cfg_file_write "$file" "${args[1]}"
+      ok "unset ${args[1]}   ${D}($file)${N}"
+      ;;
+    path)
+      echo "global:  $GLOBAL_CONFIG"
+      if [ -n "$PROJECT_ROOT" ]; then echo "project: $PROJECT_ROOT/$PROJECT_FILE"; else echo "project: (none — not inside an ecv-tf project)"; fi
+      ;;
+    *) usage_error "unknown config action: $action" config;;
+  esac
+}
+
+###############################################################################
+# ecv-tf init
+###############################################################################
+help_init() {
+  cat <<EOF
+${B}ecv-tf init${N} — scaffold a Terraform project that consumes the module library
+
+Usage:
+  ecv-tf init [options] [DIR]
+
+Creates (never overwrites existing files unless --force):
+  .ecv-tf                     project settings, with the library release pinned
+  ecv-tf.lock                 installed modules and their exact commits
+  versions.tf                 Terraform >= 1.10 and the AWS provider pin
+  providers.tf                default + "workload" AWS providers with the 3 standard tags
+  variables.tf, locals.tf     project_name / environment / region / map_migrated
+  backend.tf                  S3 backend with native locking (use_lockfile)
+  env/<env>.tfvars            per-environment values
+  env/<env>.s3.tfbackend      per-environment state bucket/key
+  main.tf, .gitignore
+
+Options:
+  -p, --project NAME    project_name, lowercase letters/digits (default: from DIR name)
+  -e, --env ENV         first environment (default: dev)
+  -r, --region REGION   AWS region (default: ap-southeast-1)
+      --bucket NAME     S3 state bucket (default: <project>-<env>-tfstate)
+      --backend TYPE    s3 (default) | local
+      --repo URL        library repo for this project
+      --ref REF         release to pin (default: latest tag)
+      --source MODE     modules (default) | git
+  -f, --force           overwrite files that already exist
+EOF
+}
+
+INIT_FORCE=0
+init_file() { # relative-path  (content on stdin)
+  local f="$PROJECT_DIR/$1"
+  if [ -e "$f" ] && [ "$INIT_FORCE" != 1 ]; then
+    cat > /dev/null; info "  ${D}skip    $1 (exists)${N}"; return 0
+  fi
+  mkdir -p "$(dirname "$f")"
+  cat > "$f"
+  info "  ${G}create${N}  $1"
+}
+
+cmd_init() {
+  local dir="" project="" env="dev" region="ap-southeast-1" bucket="" backend="s3" latest
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) help_init; return 0;;
+      -p|--project) project="$2"; shift 2;;
+      -e|--env)     env="$2"; shift 2;;
+      -r|--region)  region="$2"; shift 2;;
+      --bucket)     bucket="$2"; shift 2;;
+      --backend)    backend="$2"; shift 2;;
+      --repo)       OPT_REPO="$2"; shift 2;;
+      --ref)        OPT_REF="$2"; shift 2;;
+      --source)     OPT_SOURCE="$2"; shift 2;;
+      -f|--force)   INIT_FORCE=1; shift;;
+      -*) usage_error "unknown option: $1" init;;
+      *) [ -z "$dir" ] || usage_error "only one DIR allowed" init; dir="$1"; shift;;
+    esac
+  done
+  case "$backend" in s3|local) ;; *) die "--backend must be 's3' or 'local'";; esac
+
+  if [ -n "$dir" ]; then mkdir -p "$dir"; PROJECT_DIR="$(cd "$dir" && pwd)"; else PROJECT_DIR="$PWD"; fi
+  # A new project's settings must not be inherited from a parent project.
+  PROJECT_ROOT=""
+  [ -f "$PROJECT_DIR/$PROJECT_FILE" ] && PROJECT_ROOT="$PROJECT_DIR"
+  load_settings
+
+  [ -n "$project" ] || project="$(basename "$PROJECT_DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
+  [ -n "$project" ] || project="app"
+  printf '%s' "$project" | grep -Eq '^[a-z0-9]+$' || die "project name must match ^[a-z0-9]+\$ (got '$project')"
+  printf '%s' "$env" | grep -Eq '^[a-z0-9]+$' || die "environment must match ^[a-z0-9]+\$ (got '$env')"
+  [ -n "$bucket" ] || bucket="$project-$env-tfstate"
+
+  # Pin "latest" to a real tag so everyone on the project gets the same release.
+  if [ "$REF" = "latest" ]; then
+    latest="$(git ls-remote --tags --refs "$REPO" 2>/dev/null | sed 's#.*refs/tags/##' \
+      | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+$' \
+      | awk '{ s=$0; sub(/^v/, "", s); split(s, a, "."); print a[1], a[2], a[3], $0 }' \
+      | sort -k1,1n -k2,2n -k3,3n | awk 'END { print $4 }' || true)"
+    if [ -n "$latest" ]; then REF="$latest"
+    else warn "could not reach $REPO to find the latest release — leaving ref = latest (it will be pinned on first install)"; fi
+  fi
+
+  info "${B}Initializing ecv-tf project${N} in $PROJECT_DIR"
+  info "  project=$project  env=$env  region=$region  library=$REF  source=$SOURCE"
+  info ""
+
+  init_file "$PROJECT_FILE" <<EOF
+# ecv-tf project settings (commit this file). Change with: ecv-tf config set <key> <value>
+repo = $REPO
+ref = $REF
+dest = $DEST
+source = $SOURCE
+EOF
+  PROJECT_ROOT="$PROJECT_DIR"
+
+  if [ ! -f "$(lock_path)" ] || [ "$INIT_FORCE" = 1 ]; then
+    : | lock_write; info "  ${G}create${N}  $LOCK_FILE"
+  else
+    info "  ${D}skip    $LOCK_FILE (exists)${N}"
+  fi
+
+  if [ "$backend" = "s3" ]; then
+    init_file versions.tf <<'EOF'
+terraform {
+  # >= 1.10 for S3-native state locking (use_lockfile).
+  required_version = ">= 1.10.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+EOF
+  else
+    init_file versions.tf <<'EOF'
+terraform {
+  required_version = ">= 1.9.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+EOF
+  fi
+
+  init_file providers.tf <<'EOF'
+# Default provider: the account Terraform runs from.
+provider "aws" {
+  region = var.region
+
+  default_tags {
+    tags = local.standard_tags
+  }
+}
+
+# Workload provider: the account the library modules deploy into.
+# Library modules use the default `aws` provider, so pass this one in:
+#   providers = { aws = aws.workload }
+provider "aws" {
+  alias  = "workload"
+  region = var.region
+
+  # To deploy into another account, uncomment and set var.workload_role_arn:
+  # assume_role {
+  #   role_arn = var.workload_role_arn
+  # }
+
+  default_tags {
+    tags = local.standard_tags
+  }
+}
+EOF
+
+  init_file variables.tf <<'EOF'
+variable "project_name" {
+  description = "Project identifier, used in every resource name."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", var.project_name))
+    error_message = "project_name must be lowercase letters and digits only."
+  }
+}
+
+variable "environment" {
+  description = "Environment name (e.g. dev, uat, prod)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]+$", var.environment))
+    error_message = "environment must be lowercase letters and digits only."
+  }
+}
+
+variable "region" {
+  description = "AWS region to deploy into."
+  type        = string
+}
+
+variable "map_migrated" {
+  description = "Value of the standard map-migrated tag."
+  type        = string
+}
+
+variable "workload_role_arn" {
+  description = "IAM role ARN the workload provider assumes (only if you enable assume_role in providers.tf)."
+  type        = string
+  default     = null
+}
+EOF
+
+  init_file locals.tf <<'EOF'
+locals {
+  name = "${var.project_name}-${var.environment}"
+
+  # The 3 standard tags. Modules add only Name on top of these.
+  standard_tags = {
+    Environment      = var.environment
+    map-migrated     = var.map_migrated
+    TerraformManaged = "true"
+  }
+}
+EOF
+
+  init_file main.tf <<EOF
+# Add library modules with:
+#   ecv-tf list                       see what's available
+#   ecv-tf install -m vpc --write     copy a module in and add its block here
+EOF
+
+  init_file "env/$env.tfvars" <<EOF
+project_name = "$project"
+environment  = "$env"
+region       = "$region"
+map_migrated = "CHANGE-ME"
+EOF
+
+  if [ "$backend" = "s3" ]; then
+    init_file backend.tf <<'EOF'
+# Bucket, key and region come from env/<env>.s3.tfbackend:
+#   terraform init -backend-config=env/<env>.s3.tfbackend
+# Create the bucket first with the library's bootstrap/aws-tfstate-backend module.
+terraform {
+  backend "s3" {
+    encrypt      = true
+    use_lockfile = true # S3-native state locking, no DynamoDB table
+  }
+}
+EOF
+    init_file "env/$env.s3.tfbackend" <<EOF
+bucket = "$bucket"
+key    = "$project/$env/terraform.tfstate"
+region = "$region"
+EOF
+  fi
+
+  init_file .gitignore <<'EOF'
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+EOF
+
+  info ""
+  ok "project ready"
+  info ""
+  info "Next steps:"
+  [ -n "$dir" ] && info "  cd $dir"
+  info "  ecv-tf list                              # browse modules"
+  info "  ecv-tf install -m vpc,ec2-bastion --write"
+  info "  \$EDITOR env/$env.tfvars                 # set map_migrated"
+  if [ "$backend" = "s3" ]; then
+    info "  terraform init -backend-config=env/$env.s3.tfbackend"
+  else
+    info "  terraform init"
+  fi
+  info "  terraform plan -var-file=env/$env.tfvars"
+}
+
+###############################################################################
+# ecv-tf list
+###############################################################################
+help_list() {
+  cat <<EOF
+${B}ecv-tf list${N} — list modules in the library
+
+Usage:
+  ecv-tf list [DOMAIN] [options]
+
+Options:
+      --ref REF      list modules at this release (default: configured ref)
+      --versions     list released versions instead of modules
+  -i, --installed    list modules installed in this project (offline, reads $LOCK_FILE)
+      --plain        one <domain>/<name> per line (for scripts)
+      --repo URL     use another library repo
+EOF
+}
+
+cmd_list() {
+  local domain="" versions=0 installed=0 plain=0 all p d last="" mark ref latest
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) help_list; return 0;;
+      --ref)  OPT_REF="$2"; shift 2;;
+      --repo) OPT_REPO="$2"; shift 2;;
+      --versions|--tags) versions=1; shift;;
+      -i|--installed) installed=1; shift;;
+      --plain) plain=1; shift;;
+      -*) usage_error "unknown option: $1" list;;
+      *) domain="$1"; shift;;
+    esac
+  done
+  load_settings
+
+  if [ "$installed" = 1 ]; then
+    if [ -z "$(lock_entries)" ]; then info "No modules installed. Try: ecv-tf install -m <module>"; return 0; fi
+    if [ "$plain" = 1 ]; then lock_entries | awk '{ print $1 }'; return 0; fi
+    printf '%s%-36s %-10s %s%s\n' "$B" "MODULE" "REF" "COMMIT" "$N"
+    lock_entries | awk '{ printf "%-36s %-10s %s\n", $1, $2, substr($3, 1, 12) }'
+    return 0
+  fi
+
+  repo_clone
+
+  if [ "$versions" = 1 ]; then
+    latest="$(repo_tags | tail -n1)"
+    for p in $(repo_tags | awk '{ a[NR] = $0 } END { for (i = NR; i > 0; i--) print a[i] }'); do
+      mark=""
+      [ "$p" = "$latest" ] && mark="  ${G}(latest)${N}"
+      [ "$p" = "$REF" ] && mark="$mark  ${Y}(configured)${N}"
+      printf '%s%s\n' "$p" "$mark"
+    done
+    return 0
+  fi
+
+  resolve_ref "$REF"
+  all="$(repo_modules "$REF_REV")"
+  [ -n "$domain" ] && all="$(printf '%s\n' "$all" | awk -F/ -v d="$domain" '$1 == d')"
+  [ -n "$all" ] || die "no modules found${domain:+ in domain '$domain'} at $REF_NAME"
+
+  if [ "$plain" = 1 ]; then printf '%s\n' "$all"; return 0; fi
+
+  printf '%sModules @ %s%s  %s(%s)%s\n' "$B" "$REF_NAME" "$N" "$D" "$REPO" "$N"
+  for p in $all; do
+    d="${p%%/*}"
+    if [ "$d" != "$last" ]; then printf '\n%s%s%s\n' "$B" "$d" "$N"; last="$d"; fi
+    ref="$(lock_ref "$p")"
+    if [ -n "$ref" ]; then printf '  %-28s %sinstalled (%s)%s\n' "${p#*/}" "$G" "$ref" "$N"
+    else printf '  %s\n' "${p#*/}"; fi
+  done
+  echo
+  info "${D}Install with: ecv-tf install -m <name>[,<name>...]   e.g. ecv-tf install -m vpc,alb${N}"
+}
+
+###############################################################################
+# ecv-tf install
+###############################################################################
+help_install() {
+  cat <<EOF
+${B}ecv-tf install${N} — add library modules to this project
+
+Usage:
+  ecv-tf install -m <module>[,<module>...] [options]
+  ecv-tf install <module> [<module> ...]   [options]
+  ecv-tf install                           re-install everything in $LOCK_FILE
+
+<module> can be  vpc | aws-vpc | networking/aws-vpc
+
+Every install is recorded in $LOCK_FILE (module, release, exact commit) —
+commit it so the whole team gets identical modules.
+
+Options:
+  -m, --module LIST   module(s) to install, comma-separated; repeatable
+      --ref REF       release to install (default: the project's pinned ref)
+      --source MODE   modules (copy into $DEFAULT_DEST) | git (reference by URL)
+  -w, --write         also add a module "..." block to main.tf
+      --dest DIR      where copied modules go
+      --repo URL      library repo
+EOF
+}
+
+cmd_install() {
+  local mods=() parts=() m write=0 all p paths=() sha refs r from_lock=0 lref lsha
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) help_install; return 0;;
+      -m|--module|--modules)
+        [ $# -ge 2 ] || usage_error "$1 needs a value" install
+        IFS=',' read -r -a parts <<< "$2"
+        for m in "${parts[@]}"; do m="$(printf '%s' "$m" | tr -d '[:space:]')"; [ -n "$m" ] && mods+=("$m"); done
+        shift 2;;
+      --ref)    OPT_REF="$2"; shift 2;;
+      --source) OPT_SOURCE="$2"; shift 2;;
+      --dest)   OPT_DEST="$2"; shift 2;;
+      --repo)   OPT_REPO="$2"; shift 2;;
+      -w|--write) write=1; shift;;
+      -*) usage_error "unknown option: $1" install;;
+      *) mods+=("$1"); shift;;
+    esac
+  done
+  load_settings
+  [ -n "$PROJECT_ROOT" ] || warn "no $PROJECT_FILE here — installing into $PWD (run 'ecv-tf init' to set up a project)"
+
+  # ---- No modules given: restore everything from the lock file -------------
+  if [ ${#mods[@]} -eq 0 ]; then
+    [ -n "$(lock_entries)" ] || usage_error "nothing to install — pass modules with -m, e.g. ecv-tf install -m vpc" install
+    [ -z "$OPT_REF" ] || die "--ref can't be used when re-installing from $LOCK_FILE (use 'ecv-tf upgrade --to $OPT_REF')"
+    repo_clone
+    refs="$(lock_entries | awk '{ print $2 }' | sort -u)"
+    for r in $refs; do
+      resolve_ref "$r"
+      paths=()
+      for p in $(lock_entries | awk -v r="$r" '$2 == r { print $1 }'); do paths+=("$p"); done
+      sha="$(repo_sha "$REF_REV")"
+      for p in "${paths[@]}"; do
+        lsha="$(lock_sha "$p")"
+        if [ -n "$lsha" ] && [ "$lsha" != "$sha" ]; then
+          warn "$p: $r now points to ${sha:0:12}, but $LOCK_FILE has ${lsha:0:12} — the tag was moved. Using the locked commit."
+          REF_REV="$lsha"
+        fi
+      done
+      [ "$SOURCE" = "modules" ] && repo_export "$REF_REV" "${paths[@]}"
+      for p in "${paths[@]}"; do ok "$p @ $r"; done
+    done
+    [ "$SOURCE" = "git" ] && info "${D}(source = git: nothing to copy; terraform init downloads modules)${N}"
+    return 0
+  fi
+
+  # ---- Install the requested modules --------------------------------------
+  repo_clone
+  resolve_ref "$REF"
+  all="$(repo_modules "$REF_REV")"
+  for m in "${mods[@]}"; do
+    p="$(resolve_module "$all" "$m")"
+    case " ${paths[*]} " in *" $p "*) ;; *) paths+=("$p");; esac
+  done
+  sha="$(repo_sha "$REF_REV")"
+
+  # Warn when mixing releases inside one project.
+  for p in "${paths[@]}"; do
+    lref="$(lock_ref "$p")"
+    if [ -n "$lref" ] && [ "$lref" != "$REF_NAME" ]; then info "  $p: $lref → $REF_NAME"; fi
+  done
+
+  if [ "$SOURCE" = "modules" ]; then repo_export "$REF_REV" "${paths[@]}"; fi
+  for p in "${paths[@]}"; do lock_set "$p" "$REF_NAME" "$sha"; done
+
+  # First install in a project that still says "latest": pin the real tag.
+  if [ -n "$PROJECT_ROOT" ] && [ "$(cfg_file_get "$PROJECT_ROOT/$PROJECT_FILE" ref || true)" = "latest" ] && [ -z "$OPT_REF" ]; then
+    cfg_file_write "$PROJECT_ROOT/$PROJECT_FILE" ref "$REF_NAME"
+    info "  pinned project ref to $REF_NAME"
+  fi
+
+  info ""
+  ok "installed ${#paths[@]} module(s) @ $REF_NAME ${D}(${sha:0:12})${N}"
+  for p in "${paths[@]}"; do
+    if [ "$SOURCE" = "modules" ]; then info "  $p  →  $DEST/$p"; else info "  $p  (git source)"; fi
+  done
+  info ""
+
+  if [ "$write" = 1 ]; then
+    for p in "${paths[@]}"; do write_snippet "$p" "$REF_NAME"; done
+  else
+    info "Add to your configuration (or re-run with --write):"
+    info ""
+    for p in "${paths[@]}"; do module_snippet "$p" "$REF_NAME"; echo; done
+  fi
+  info "Then: terraform init"
+}
+
+###############################################################################
+# ecv-tf upgrade
+###############################################################################
+help_upgrade() {
+  cat <<EOF
+${B}ecv-tf upgrade${N} — move installed modules to a newer library release
+
+Usage:
+  ecv-tf upgrade [<module> ...] [options]
+  ecv-tf upgrade --self
+
+With no modules, upgrades everything in $LOCK_FILE to the latest release and
+updates the project's pinned ref. Modules whose code didn't change between the
+two releases are still re-pinned so the project stays on one release.
+
+Options:
+  -c, --check     only show what would change, don't touch anything
+      --to REF    upgrade to this release instead of the latest
+      --self      update the ecv-tf CLI itself to the version in the latest release
+      --repo URL  library repo
+EOF
+}
+
+self_path() {
+  local p="$0" l
+  case "$p" in */*) ;; *) p="$(command -v "$p")";; esac
+  while [ -L "$p" ]; do
+    l="$(readlink "$p")"
+    case "$l" in /*) p="$l";; *) p="$(dirname "$p")/$l";; esac
+  done
+  printf '%s' "$p"
+}
+
+upgrade_self() {
+  local self new_ver
+  self="$(self_path)"
+  repo_clone
+  resolve_ref "${OPT_TO:-latest}"
+  git -C "$REPO_DIR" show "$REF_REV:cli/ecv-tf" > "$TMP_ROOT/ecv-tf.new" 2>/dev/null \
+    || die "release $REF_NAME doesn't contain cli/ecv-tf"
+  bash -n "$TMP_ROOT/ecv-tf.new" || die "downloaded ecv-tf from $REF_NAME has syntax errors — not installing"
+  new_ver="$(sed -n 's/^ECV_TF_VERSION="\(.*\)"$/\1/p' "$TMP_ROOT/ecv-tf.new" | head -n1)"
+  if [ "$new_ver" = "$ECV_TF_VERSION" ] && cmp -s "$TMP_ROOT/ecv-tf.new" "$self"; then
+    ok "ecv-tf is up to date ($ECV_TF_VERSION, from $REF_NAME)"; return 0
+  fi
+  if [ "$CHECK" = 1 ]; then info "ecv-tf $ECV_TF_VERSION → ${new_ver:-?} available in $REF_NAME"; return 0; fi
+  [ -w "$self" ] || die "can't write $self — re-run with permissions (e.g. sudo ecv-tf upgrade --self)"
+  cat "$TMP_ROOT/ecv-tf.new" > "$self"
+  ok "ecv-tf $ECV_TF_VERSION → ${new_ver:-?}  ($self, from $REF_NAME)"
+}
+
+CHECK=0; OPT_TO=""
+cmd_upgrade() {
+  local self=0 mods=() m entries p cur cur_rev target target_rev sha status all todo=() n_up=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -h|--help) help_upgrade; return 0;;
+      -c|--check|--dry-run) CHECK=1; shift;;
+      --to)     OPT_TO="$2"; shift 2;;
+      --self)   self=1; shift;;
+      --repo)   OPT_REPO="$2"; shift 2;;
+      -*) usage_error "unknown option: $1" upgrade;;
+      *) mods+=("$1"); shift;;
+    esac
+  done
+  load_settings
+  if [ "$self" = 1 ]; then upgrade_self; return 0; fi
+
+  entries="$(lock_entries)"
+  [ -n "$entries" ] || die "no modules installed in this project ($LOCK_FILE is empty)"
+  if [ ${#mods[@]} -gt 0 ]; then
+    all="$(printf '%s\n' "$entries" | awk '{ print $1 }')"
+    for m in "${mods[@]}"; do todo+=("$(resolve_module "$all" "$m")"); done
+  else
+    for p in $(printf '%s\n' "$entries" | awk '{ print $1 }'); do todo+=("$p"); done
+  fi
+
+  repo_clone
+  resolve_ref "${OPT_TO:-latest}"
+  target="$REF_NAME"; target_rev="$REF_REV"
+  sha="$(repo_sha "$target_rev")"
+  all="$(repo_modules "$target_rev")"
+
+  printf '%s%-36s %-10s    %-10s %s%s\n' "$B" "MODULE" "CURRENT" "TARGET" "CHANGES" "$N"
+  local up=()
+  for p in "${todo[@]}"; do
+    cur="$(lock_ref "$p")"
+    if ! printf '%s\n' "$all" | grep -Fxq -- "$p"; then
+      status="${R}removed in $target — skipped${N}"
+    elif [ "$cur" = "$target" ]; then
+      status="${D}up to date${N}"
+    else
+      cur_rev="$(lock_sha "$p")"
+      if [ -z "$cur_rev" ] || ! git -C "$REPO_DIR" rev-parse -q --verify "$cur_rev^{commit}" >/dev/null; then
+        status="${Y}unknown (current commit not in repo)${N}"
+      elif git -C "$REPO_DIR" diff --quiet "$cur_rev" "$target_rev" -- "modules/$p"; then
+        status="no code changes (re-pin only)"
+      else
+        status="${G}$(git -C "$REPO_DIR" diff --shortstat "$cur_rev" "$target_rev" -- "modules/$p" | sed 's/^ *//')${N}"
+      fi
+      up+=("$p"); n_up=$((n_up + 1))
+    fi
+    printf '%-36s %-10s →  %-10s %s\n' "$p" "${cur:-?}" "$target" "$status"
+  done
+  echo
+
+  if [ "$n_up" -eq 0 ]; then ok "everything is on $target"; return 0; fi
+  if [ "$CHECK" = 1 ]; then info "Run 'ecv-tf upgrade${OPT_TO:+ --to $OPT_TO}' to apply."; return 0; fi
+
+  if [ "$SOURCE" = "modules" ]; then repo_export "$target_rev" "${up[@]}"; fi
+  for p in "${up[@]}"; do
+    cur="$(lock_ref "$p")"
+    [ "$SOURCE" = "git" ] && rewrite_git_refs "$p" "$cur" "$target"
+    lock_set "$p" "$target" "$sha"
+  done
+  if [ -n "$PROJECT_ROOT" ] && [ ${#mods[@]} -eq 0 ]; then
+    cfg_file_write "$PROJECT_ROOT/$PROJECT_FILE" ref "$target"
+    info "  project ref → $target"
+  fi
+  ok "upgraded $n_up module(s) to $target"
+  info ""
+  info "Next: review the diff, then  terraform init -upgrade && terraform plan"
+}
+
+###############################################################################
+# help / main
+###############################################################################
+usage() {
+  cat <<EOF
+${B}ecv-tf${N} $ECV_TF_VERSION — use the ECV Terraform AWS module library like a package manager
+
+Usage:
+  ecv-tf <command> [options]
+
+Commands:
+  config     show or change settings (repo, ref, dest, source)
+  init       scaffold a new Terraform project that uses the library
+  list       list modules (--versions for releases, -i for installed)
+  install    add modules:  ecv-tf install -m vpc,alb [--write]
+  upgrade    move modules to a newer release  (--check, --to, --self)
+  help       show help:    ecv-tf help <command>
+  version    print the ecv-tf version
+
+Quick start:
+  ecv-tf init my-app -p myapp -e dev
+  cd my-app
+  ecv-tf list
+  ecv-tf install -m vpc,ec2-bastion --write
+  terraform init -backend-config=env/dev.s3.tfbackend
+EOF
+}
+
+cmd_help() {
+  case "${1:-}" in
+    "") usage;;
+    config) help_config;; init) help_init;; list|ls) help_list;;
+    install|i|add) help_install;; upgrade|update) help_upgrade;;
+    *) usage_error "unknown command: $1" "";;
+  esac
+}
+
+main() {
+  local cmd="${1:-help}"
+  [ $# -gt 0 ] && shift
+  case "$cmd" in
+    config)              cmd_config "$@";;
+    init)                cmd_init "$@";;
+    list|ls)             cmd_list "$@";;
+    install|i|add)       cmd_install "$@";;
+    upgrade|update)      cmd_upgrade "$@";;
+    help|-h|--help)      cmd_help "$@";;
+    version|-v|--version) echo "ecv-tf $ECV_TF_VERSION";;
+    *) printf '%serror:%s unknown command: %s\n\n' "$R" "$N" "$cmd" >&2; usage >&2; exit 2;;
+  esac
+}
+
+main "$@"
