@@ -510,13 +510,14 @@ cmd_init() {
   info "  project=$project  env=$env  region=$region  library=$REF  source=$SOURCE"
   info ""
 
-  init_file "$PROJECT_FILE" <<EOF
-# ecv-tf project settings (commit this file). Change with: ecv-tf config set <key> <value>
-repo = $REPO
-ref = $REF
-dest = $DEST
-source = $SOURCE
-EOF
+  # Only repo and ref are pinned. dest/source follow the CLI defaults unless
+  # chosen explicitly, so a changed default reaches existing projects too.
+  {
+    echo "# ecv-tf project settings (commit this file). Change with: ecv-tf config set <key> <value>"
+    echo "repo = $REPO"
+    echo "ref = $REF"
+    if [ -n "$OPT_SOURCE" ]; then echo "source = $SOURCE"; fi
+  } | init_file "$PROJECT_FILE"
   PROJECT_ROOT="$PROJECT_DIR"
 
   if [ ! -f "$(lock_path)" ] || [ "$INIT_FORCE" = 1 ]; then
