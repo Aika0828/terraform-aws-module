@@ -25,7 +25,7 @@ pattern (no `environments/dev` folders).
 ```bash
 ./cli/install.sh                          # installs ecv-tf to ~/.local/bin
 ecv-tf init my-app -p myapp -e dev        # scaffold a consumer project, pin the latest release
-cd my-app && ecv-tf install -m vpc,alb --write
+cd my-app && ecv-tf install               # all modules → .ecv-tf-modules/ (git-ignored), pinned in ecv-tf.lock.json
 ecv-tf upgrade --check                    # later: see what a newer release changes
 ```
 

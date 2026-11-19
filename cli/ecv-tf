@@ -5,7 +5,7 @@
 #   ecv-tf config    show / change settings (repo, ref, dest, source)
 #   ecv-tf init      scaffold a new consumer project
 #   ecv-tf list      list modules (or versions) available in the library
-#   ecv-tf install   add modules to the project, pinned in ecv-tf.lock
+#   ecv-tf install   install all modules (or -m some), pinned in ecv-tf.lock.json
 #   ecv-tf upgrade   move installed modules to a newer release (or --self)
 #   ecv-tf help      help for any command
 #
@@ -13,16 +13,17 @@
 #
 set -eo pipefail
 
-ECV_TF_VERSION="0.1.0"
+ECV_TF_VERSION="0.2.0"
 
 DEFAULT_REPO="git@gitlab.ecvmsp.com:ecv-ph-tech-team/ph-modernization-team/terraform-aws-module.git"
 DEFAULT_REF="latest"
-DEFAULT_DEST="modules/terraform-aws-modules"
+DEFAULT_DEST=".ecv-tf-modules/terraform-aws-modules"
 DEFAULT_SOURCE="modules"
 
 GLOBAL_CONFIG="${ECV_TF_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/ecv-tf/config}"
 PROJECT_FILE=".ecv-tf"
-LOCK_FILE="ecv-tf.lock"
+LOCK_FILE="ecv-tf.lock.json"
+LEGACY_LOCK_FILE="ecv-tf.lock"   # plain-text lock from ecv-tf 0.1.x, converted on next write
 
 ###############################################################################
 # Output helpers
@@ -204,21 +205,74 @@ repo_export() { # rev path...
 }
 
 ###############################################################################
-# Lock file:  <domain>/<name>  <ref>  <commit>
+# Lock file (JSON). Commit it. Shape:
+#   {
+#     "lockfileVersion": 1,
+#     "repo": "<library git URL>",
+#     "modules": {
+#       "networking/aws-vpc": { "ref": "v0.2.1", "commit": "<sha>" }
+#     }
+#   }
+# Read without jq: the file is flattened and every "<domain>/<name>": { ... }
+# object is pulled out, so it still parses if someone reformats it.
+# Internally entries are passed around as lines: "<domain>/<name> <ref> <commit>".
 ###############################################################################
 lock_path() { printf '%s/%s' "$PROJECT_DIR" "$LOCK_FILE"; }
-lock_entries() { local f; f="$(lock_path)"; [ -f "$f" ] && grep -vE '^[[:space:]]*(#|$)' "$f" || true; }
+
+lock_entries() {
+  local f legacy="$PROJECT_DIR/$LEGACY_LOCK_FILE"
+  f="$(lock_path)"
+  if [ -f "$f" ]; then
+    tr -d '\n\r' < "$f" | awk '{
+      s = $0
+      while (match(s, /"[^"]+"[ \t]*:[ \t]*\{[^{}]*\}/)) {
+        e = substr(s, RSTART, RLENGTH); s = substr(s, RSTART + RLENGTH)
+        k = e; sub(/^"/, "", k); sub(/".*/, "", k)
+        if (k !~ /\//) continue
+        r = ""; c = ""
+        if (match(e, /"ref"[ \t]*:[ \t]*"[^"]*"/))    { r = substr(e, RSTART, RLENGTH); sub(/^"ref"[ \t]*:[ \t]*"/, "", r); sub(/"$/, "", r) }
+        if (match(e, /"commit"[ \t]*:[ \t]*"[^"]*"/)) { c = substr(e, RSTART, RLENGTH); sub(/^"commit"[ \t]*:[ \t]*"/, "", c); sub(/"$/, "", c) }
+        print k, r, c
+      }
+    }'
+  elif [ -f "$legacy" ]; then
+    grep -vE '^[[:space:]]*(#|$)' "$legacy" || true
+  fi
+}
 lock_ref() { lock_entries | awk -v m="$1" '$1 == m { print $2 }'; }
 lock_sha() { lock_entries | awk -v m="$1" '$1 == m { print $3 }'; }
 
+json_str() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
 lock_write() { # entries on stdin
+  sort -u | awk 'NF' > "$TMP_ROOT/lock.entries"
   {
-    echo "# ecv-tf.lock — managed by ecv-tf. Commit this file."
-    echo "# repo: $REPO"
-    echo "# module                             ref        commit"
-    sort -u | awk 'NF { printf "%-36s %-10s %s\n", $1, $2, $3 }'
+    printf '{\n'
+    printf '  "lockfileVersion": 1,\n'
+    printf '  "repo": "%s",\n' "$(json_str "$REPO")"
+    printf '  "modules": {'
+    awk '{ printf "%s\n    \"%s\": { \"ref\": \"%s\", \"commit\": \"%s\" }", (NR > 1 ? "," : ""), $1, $2, $3 }
+         END { if (NR) printf "\n  " }' "$TMP_ROOT/lock.entries"
+    printf '}\n}\n'
   } > "$TMP_ROOT/lock.new"
   cat "$TMP_ROOT/lock.new" > "$(lock_path)"
+  if [ -f "$PROJECT_DIR/$LEGACY_LOCK_FILE" ]; then
+    rm -f "$PROJECT_DIR/$LEGACY_LOCK_FILE"
+    info "  converted $LEGACY_LOCK_FILE → $LOCK_FILE"
+  fi
+}
+
+# Keep copied modules out of git: they are restored from the lock with `ecv-tf install`.
+ensure_gitignore() {
+  local gi="$PROJECT_DIR/.gitignore" entry="/$DEST/"
+  [ "$SOURCE" = "modules" ] || return 0
+  if [ -f "$gi" ] && grep -qxF -e "$entry" -e "$DEST/" -e "/$DEST" -e "$DEST" "$gi"; then return 0; fi
+  {
+    if [ -s "$gi" ] && [ -n "$(tail -c1 "$gi")" ]; then echo; fi
+    echo "# Library modules installed by ecv-tf — restore with: ecv-tf install"
+    echo "$entry"
+  } >> "$gi"
+  info "  added $entry to .gitignore"
 }
 
 lock_set() { # module ref sha
@@ -377,7 +431,7 @@ Usage:
 
 Creates (never overwrites existing files unless --force):
   .ecv-tf                     project settings, with the library release pinned
-  ecv-tf.lock                 installed modules and their exact commits
+  $LOCK_FILE            installed modules and their exact commits (JSON)
   versions.tf                 Terraform >= 1.10 and the AWS provider pin
   providers.tf                default + "workload" AWS providers with the 3 standard tags
   variables.tf, locals.tf     project_name / environment / region / map_migrated
@@ -580,9 +634,10 @@ locals {
 EOF
 
   init_file main.tf <<EOF
-# Add library modules with:
+# Library modules are installed into $DEST/ (git-ignored).
+#   ecv-tf install                    install all modules (team: run this after cloning)
+#   ecv-tf install -m vpc --write     install one module and add its block here
 #   ecv-tf list                       see what's available
-#   ecv-tf install -m vpc --write     copy a module in and add its block here
 EOF
 
   init_file "env/$env.tfvars" <<EOF
@@ -623,14 +678,15 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 EOF
+  ensure_gitignore
 
   info ""
   ok "project ready"
   info ""
   info "Next steps:"
   [ -n "$dir" ] && info "  cd $dir"
+  info "  ecv-tf install                           # all modules → $DEST/"
   info "  ecv-tf list                              # browse modules"
-  info "  ecv-tf install -m vpc,ec2-bastion --write"
   info "  \$EDITOR env/$env.tfvars                 # set map_migrated"
   if [ "$backend" = "s3" ]; then
     info "  terraform init -backend-config=env/$env.s3.tfbackend"
@@ -676,7 +732,7 @@ cmd_list() {
   load_settings
 
   if [ "$installed" = 1 ]; then
-    if [ -z "$(lock_entries)" ]; then info "No modules installed. Try: ecv-tf install -m <module>"; return 0; fi
+    if [ -z "$(lock_entries)" ]; then info "No modules installed. Try: ecv-tf install"; return 0; fi
     if [ "$plain" = 1 ]; then lock_entries | awk '{ print $1 }'; return 0; fi
     printf '%s%-36s %-10s %s%s\n' "$B" "MODULE" "REF" "COMMIT" "$N"
     lock_entries | awk '{ printf "%-36s %-10s %s\n", $1, $2, substr($3, 1, 12) }'
@@ -712,7 +768,7 @@ cmd_list() {
     else printf '  %s\n' "${p#*/}"; fi
   done
   echo
-  info "${D}Install with: ecv-tf install -m <name>[,<name>...]   e.g. ecv-tf install -m vpc,alb${N}"
+  info "${D}Install all with: ecv-tf install   — or some: ecv-tf install -m vpc,alb${N}"
 }
 
 ###############################################################################
@@ -723,14 +779,17 @@ help_install() {
 ${B}ecv-tf install${N} — add library modules to this project
 
 Usage:
+  ecv-tf install                           install ALL modules in the library
   ecv-tf install -m <module>[,<module>...] [options]
   ecv-tf install <module> [<module> ...]   [options]
-  ecv-tf install                           re-install everything in $LOCK_FILE
 
 <module> can be  vpc | aws-vpc | networking/aws-vpc
 
+Modules are copied into $DEFAULT_DEST/, which is added to .gitignore.
 Every install is recorded in $LOCK_FILE (module, release, exact commit) —
-commit it so the whole team gets identical modules.
+commit that file. After cloning a project, teammates (and CI) run 'ecv-tf install'
+to get exactly the same modules: anything already in the lock stays on its
+locked commit; modules not in the lock yet come from the project's pinned ref.
 
 Options:
   -m, --module LIST   module(s) to install, comma-separated; repeatable
@@ -742,8 +801,77 @@ Options:
 EOF
 }
 
+# First install in a project that still says "latest": pin the real tag.
+pin_project_ref() {
+  if [ -n "$PROJECT_ROOT" ] && [ -z "$OPT_REF" ] \
+     && [ "$(cfg_file_get "$PROJECT_ROOT/$PROJECT_FILE" ref || true)" = "latest" ]; then
+    cfg_file_write "$PROJECT_ROOT/$PROJECT_FILE" ref "$REF_NAME"
+    info "  pinned project ref to $REF_NAME"
+  fi
+}
+
+# Install every module: locked ones on their locked commit, the rest at the project ref.
+install_all() { # write-flag
+  local plan="$TMP_ROOT/plan" p r c cur psha n_locked=0 n_new=0 sha_list s grp=()
+  [ "$1" = 1 ] && die "--write needs -m (it would add a block for every module in the library)"
+  [ -z "$OPT_REF" ] || die "--ref can't be used to install everything — locked modules stay pinned. Use: ecv-tf upgrade --to $OPT_REF"
+
+  repo_clone
+  resolve_ref "$REF"
+  psha="$(repo_sha "$REF_REV")"
+  : > "$plan"
+
+  lock_entries > "$TMP_ROOT/locked"
+  while read -r p r c; do
+    [ -n "$p" ] || continue
+    if [ -n "$c" ] && git -C "$REPO_DIR" rev-parse -q --verify "$c^{commit}" >/dev/null; then
+      cur="$(git -C "$REPO_DIR" rev-parse -q --verify "refs/tags/$r^{commit}" 2>/dev/null || true)"
+      if [ -n "$cur" ] && [ "$cur" != "$c" ]; then
+        warn "$p: tag $r now points to ${cur:0:12}, but $LOCK_FILE has ${c:0:12} (the tag was moved). Keeping the locked commit."
+      fi
+    else
+      warn "$p: locked commit ${c:0:12} not found — using $r"
+      c="$(repo_sha "$r")" || die "ref $r for $p not found in $REPO"
+    fi
+    git -C "$REPO_DIR" ls-tree -d --name-only "$c" -- "modules/$p" | grep -q . \
+      || die "$p is in $LOCK_FILE but doesn't exist at ${c:0:12}"
+    printf '%s %s %s\n' "$p" "$r" "$c" >> "$plan"
+    n_locked=$((n_locked + 1))
+  done < "$TMP_ROOT/locked"
+
+  for p in $(repo_modules "$REF_REV"); do
+    if ! awk -v m="$p" '$1 == m { f = 1 } END { exit !f }' "$plan"; then
+      printf '%s %s %s\n' "$p" "$REF_NAME" "$psha" >> "$plan"
+      n_new=$((n_new + 1))
+    fi
+  done
+  [ -s "$plan" ] || die "no modules found at $REF_NAME"
+
+  if [ "$SOURCE" = "modules" ]; then
+    sha_list="$(awk '{ print $3 }' "$plan" | sort -u)"
+    for s in $sha_list; do
+      grp=()
+      for p in $(awk -v c="$s" '$3 == c { print $1 }' "$plan"); do grp+=("$p"); done
+      repo_export "$s" "${grp[@]}"
+    done
+  fi
+  lock_write < "$plan"
+  ensure_gitignore
+  pin_project_ref
+
+  info ""
+  ok "installed $((n_locked + n_new)) module(s)  ${D}($n_locked from $LOCK_FILE, $n_new new @ $REF_NAME)${N}"
+  if [ "$SOURCE" = "modules" ]; then info "  → $DEST/   (git-ignored)"
+  else info "  ${D}(source = git: nothing copied; terraform init downloads what you reference)${N}"; fi
+  if [ "$(awk '{ print $2 }' "$plan" | sort -u | grep -c .)" -gt 1 ]; then
+    info "  note: modules are on different releases — 'ecv-tf list -i' shows which; 'ecv-tf upgrade' aligns them"
+  fi
+  info ""
+  info "Reference a module with:  source = \"$(module_source "networking/aws-vpc" "$REF_NAME")\""
+}
+
 cmd_install() {
-  local mods=() parts=() m write=0 all p paths=() sha refs r from_lock=0 lref lsha
+  local mods=() parts=() m write=0 all p paths=() sha lref
   while [ $# -gt 0 ]; do
     case "$1" in
       -h|--help) help_install; return 0;;
@@ -764,28 +892,9 @@ cmd_install() {
   load_settings
   [ -n "$PROJECT_ROOT" ] || warn "no $PROJECT_FILE here — installing into $PWD (run 'ecv-tf init' to set up a project)"
 
-  # ---- No modules given: restore everything from the lock file -------------
+  # ---- No modules given: install every module ------------------------------
   if [ ${#mods[@]} -eq 0 ]; then
-    [ -n "$(lock_entries)" ] || usage_error "nothing to install — pass modules with -m, e.g. ecv-tf install -m vpc" install
-    [ -z "$OPT_REF" ] || die "--ref can't be used when re-installing from $LOCK_FILE (use 'ecv-tf upgrade --to $OPT_REF')"
-    repo_clone
-    refs="$(lock_entries | awk '{ print $2 }' | sort -u)"
-    for r in $refs; do
-      resolve_ref "$r"
-      paths=()
-      for p in $(lock_entries | awk -v r="$r" '$2 == r { print $1 }'); do paths+=("$p"); done
-      sha="$(repo_sha "$REF_REV")"
-      for p in "${paths[@]}"; do
-        lsha="$(lock_sha "$p")"
-        if [ -n "$lsha" ] && [ "$lsha" != "$sha" ]; then
-          warn "$p: $r now points to ${sha:0:12}, but $LOCK_FILE has ${lsha:0:12} — the tag was moved. Using the locked commit."
-          REF_REV="$lsha"
-        fi
-      done
-      [ "$SOURCE" = "modules" ] && repo_export "$REF_REV" "${paths[@]}"
-      for p in "${paths[@]}"; do ok "$p @ $r"; done
-    done
-    [ "$SOURCE" = "git" ] && info "${D}(source = git: nothing to copy; terraform init downloads modules)${N}"
+    install_all "$write"
     return 0
   fi
 
@@ -807,12 +916,8 @@ cmd_install() {
 
   if [ "$SOURCE" = "modules" ]; then repo_export "$REF_REV" "${paths[@]}"; fi
   for p in "${paths[@]}"; do lock_set "$p" "$REF_NAME" "$sha"; done
-
-  # First install in a project that still says "latest": pin the real tag.
-  if [ -n "$PROJECT_ROOT" ] && [ "$(cfg_file_get "$PROJECT_ROOT/$PROJECT_FILE" ref || true)" = "latest" ] && [ -z "$OPT_REF" ]; then
-    cfg_file_write "$PROJECT_ROOT/$PROJECT_FILE" ref "$REF_NAME"
-    info "  pinned project ref to $REF_NAME"
-  fi
+  ensure_gitignore
+  pin_project_ref
 
   info ""
   ok "installed ${#paths[@]} module(s) @ $REF_NAME ${D}(${sha:0:12})${N}"
@@ -951,6 +1056,14 @@ cmd_upgrade() {
     info "  project ref → $target"
   fi
   ok "upgraded $n_up module(s) to $target"
+  if [ ${#mods[@]} -eq 0 ]; then
+    m="$(lock_entries | awk '{ print $1 }')"
+    m="$(printf '%s\n' "$all" | grep -vxF -f <(printf '%s\n' "$m") || true)"
+    if [ -n "$m" ]; then
+      info "  $(printf '%s\n' "$m" | grep -c .) new module(s) in $target: $(printf '%s ' $m)"
+      info "  run 'ecv-tf install' to add them"
+    fi
+  fi
   info ""
   info "Next: review the diff, then  terraform init -upgrade && terraform plan"
 }
@@ -969,7 +1082,7 @@ Commands:
   config     show or change settings (repo, ref, dest, source)
   init       scaffold a new Terraform project that uses the library
   list       list modules (--versions for releases, -i for installed)
-  install    add modules:  ecv-tf install -m vpc,alb [--write]
+  install    install all modules, or some:  ecv-tf install -m vpc,alb [--write]
   upgrade    move modules to a newer release  (--check, --to, --self)
   help       show help:    ecv-tf help <command>
   version    print the ecv-tf version
@@ -977,9 +1090,10 @@ Commands:
 Quick start:
   ecv-tf init my-app -p myapp -e dev
   cd my-app
-  ecv-tf list
-  ecv-tf install -m vpc,ec2-bastion --write
+  ecv-tf install                 # all modules → $DEFAULT_DEST/ (git-ignored)
   terraform init -backend-config=env/dev.s3.tfbackend
+
+After cloning an existing project:  ecv-tf install  (restores from $LOCK_FILE)
 EOF
 }
 
